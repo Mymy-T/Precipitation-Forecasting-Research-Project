@@ -1,5 +1,6 @@
 import cfgrib
 import itertools
+import math
 import numpy as np
 import os
 import pandas as pd
@@ -8,22 +9,36 @@ import xarray as xr
 # The data files are saved as .grib files in the folder ERA5_Data within the current working directory.
 # There is a separate file for each year for the surface data
 class DatasetLoader:
-    def convert_dist_to_coords(dist: int, origin: tuple):
-        pass
+    def _convert_dist_to_coords(self, dist: float, origin: tuple):
+        """The specified distance should be in miles, and the origin should be a tuple of the form (latitude, longitude);
+            Returns 4 variables: low_lat_bound, high_lat_bound, low_long_bound, high_long_bound
+        """
+        origin_lat = origin[0]
+        origin_long = origin[1]
+        earth_radius_miles = 3959
+        delta_lat = (180 * dist) / (math.pi * earth_radius_miles * math.sqrt(2))
+        delta_long = (180 * dist) / (math.pi * earth_radius_miles * math.cos(origin_lat) * math.sqrt(2))
+        return origin_lat - delta_lat, origin_lat + delta_lat, origin_long - delta_long, origin_long + delta_long
 
-    def create_feature_dataframe(dataset: xr.Dataset, low_lat_bound: float, high_lat_bound: float, low_long_bound: float, high_long_bound: float, num_additional_points: int):
-        """Creates a pandas dataframe from dataset; the resulting dataframe is saved to the system"""
+
+    def save_feature_dataframe(self, dataset: xr.Dataset, num_additional_points: int, dist: float, origin = (37.23, -80.42), folder_name = "CSV_Datasets"):
+        """Creates a pandas dataframe from dataset; the resulting dataframe is saved as a csv;
+            The default origin is set to the latitude and longitude coordinates of Blacksburg, VA
+        """
         coords = []
         # Blacksburg coordinates are about (37.23, -80.42); add these first, data for this point will be present in all trials
         lat_points = dataset["latitude"].to_numpy()
         long_points = dataset["longitude"].to_numpy()
-        bburg_lat_index = np.argmin(np.abs(lat_points - 37.23))
-        bburg_long_index = np.argmin(np.abs(long_points + 80.42))
-        coords.append((lat_points[bburg_lat_index],long_points[bburg_long_index]))
+        origin_lat_index = np.argmin(np.abs(lat_points - origin[0]))
+        origin_long_index = np.argmin(np.abs(long_points - origin[1]))
+        coords.append((lat_points[origin_lat_index],long_points[origin_long_index]))
+
+
 
         num_additional_points = min(num_additional_points, len(lat_points) * len(long_points) - 1) # Prevent cases where total num points > num of points in dataset
 
         # Restrict the possible coordinate locations
+        low_lat_bound, high_lat_bound, low_long_bound, high_long_bound = self._convert_dist_to_coords(dist=dist, origin=origin)
         lat_points = lat_points[lat_points > low_lat_bound]
         lat_points = lat_points[lat_points < high_lat_bound]
         long_points = long_points[long_points > low_long_bound]
@@ -39,18 +54,35 @@ class DatasetLoader:
             else:
                 continue
         
-        lat_coords = []
-        long_coords = []
+        # lat_coords = []
+        # long_coords = []
+        df_subsets = []
         for coord in coords:
-            lat_coords.append(coord[0])
-            long_coords.append(coord[1])
-        refined_xarray = dataset.sel(dict(latitude=lat_coords, longitude=long_coords))
-        df = refined_xarray.to_dataframe()
-        df = df.drop(columns=["surface", "step", "number", "valid_time"])
-        df = df.unstack([1, 2]) # Convert the MultiIndex of time, latitude, longtitude into a singular index of time; latitude and longtiude become column levels 1 and 2 respectively
-        df.columns = df.columns.to_flat_index() # Merge all levels, the resulting column labels will be of the form (weather_var, latitude, longitude)
+            # lat_coords.append(coord[0])
+            # long_coords.append(coord[1])
+            xarray_subset = dataset.sel(dict(latitude=coord[0], longitude=coord[1]))
+            df_subset = xarray_subset.to_dataframe()
+            lat = df_subset["latitude"].iloc[0] # Get first element of latitude col, all vals are the same for each subset
+            long = df_subset["longitude"].iloc[0] # Get first element of longitude col, all vals are the same for each subset
+            df_subset = df_subset.drop(columns=["surface", "step", "number", "valid_time", "latitude", "longitude"])
+            new_cols = list(map(lambda x: f"{x}@({lat},{long})", list(df_subset.columns))) # Each weather variable column name will be of the form 'weather_var@(latitude, longitude)'
+            df_subset.columns = new_cols
+            df_subsets.append(df_subset)
+        
+        df = pd.concat(df_subsets, axis=1)
+        folder_path = os.getcwd() + "/" + folder_name
+        if not os.path.exists(folder_path):
+            os.mkdir(folder_path)
 
-        # TODO: Save dataframe as csv file or something for easy access when training models
+        save_path = folder_path + "/" + f"features--{num_additional_points + 1}_sites--{dist}_miles.csv"
+        df.to_csv(save_path)
+
+            
+        # refined_xarray = dataset.sel(dict(latitude=lat_coords, longitude=long_coords))
+        # df = refined_xarray.to_dataframe()
+        # df = df.drop(columns=["surface", "step", "number", "valid_time"])
+        # df = df.unstack([1, 2]) # Convert the MultiIndex of time, latitude, longtitude into a singular index of time; latitude and longtiude become column levels 1 and 2 respectively
+        #df.columns = df.columns.to_flat_index() # Merge all levels, the resulting column labels will be of the form (weather_var, latitude, longitude)
 
         # var_labels = list(df.columns.levels[0].values)
         # lat_labels = list(map(str, list(df.columns.levels[1].values)))
@@ -58,19 +90,11 @@ class DatasetLoader:
 
 
     
-    def join_datasets_by_year(datasets: dict):
+    def join_datasets_by_year(self, datasets):
         dataset_list = []
-        for year in dict.keys():
+        for year in datasets.keys():
             dataset_list.append(datasets[year])
-        return xr.concat(datasets, dim="time")
-
-    # def determine_dataset_variable_type(dataset: xr.Dataset):
-    #     if "tp" in dataset.data_vars:
-    #         # This is the dataset containing the total precipitation (accumulated variable); for this project, total precipitation is the only accumulated variable
-    #         return "target"
-    #     else:
-    #         # All other instantaneous variables
-    #         return "features"
+        return xr.concat(dataset_list, dim="time")
         
     
 
@@ -85,13 +109,12 @@ for year in years:
     surface_feature_datasets[year] = surface_datasets[0]
     target_datasets[year] = surface_datasets[1]
 
+
 surface_feature_dataset = dsl.join_datasets_by_year(surface_feature_datasets)
 del surface_feature_datasets
 target_dataset = dsl.join_datasets_by_year(target_datasets)
 del target_datasets
 
-    
-
-# ds = xr.open_dataset(path, engine="cfgrib")
-# df = ds.to_dataframe()
-# print(df.head())
+for i in range(5):
+    d = (i+1) * 100
+    dsl.save_feature_dataframe(dataset=surface_feature_dataset, num_additional_points=15, dist=d)
