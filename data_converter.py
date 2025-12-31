@@ -101,11 +101,13 @@ class DatasetLoader:
         target_xarray = target_dataset.sel(dict(latitude=origin_lat, longitude=origin_long))
         target_df = target_xarray.to_dataframe()
         # Drop extra columns
-        target_df = target_df.drop(columns=["number", "surface", "latitude", "longitude"])
+        target_df.drop(columns=["number", "surface", "latitude", "longitude"], inplace=True)
         # Format index & column
-        target_df = target_df.set_index("valid_time")
+        target_df.set_index("valid_time", inplace=True)
         target_new_cols = list(map(lambda x: f"{x}@({origin_lat},{origin_long})", list(target_df.columns))) # Target variables @ the origin (location of interest)
         target_df.columns = target_new_cols
+        # Shift all values up by 1, since tp measures the accumulated precipitation from valid_time - 1hr to valid_time
+        target_df = target_df.shift(-1)
         # Match rows to the rows of feature_df (accumulated vars contain extra rows at the beginning and end)
         start = feature_df.index[0]
         end = feature_df_subset.index[-1]
@@ -113,6 +115,8 @@ class DatasetLoader:
         target_df.dropna(inplace=True) # Remove any overlapping indicies resulting join_datasets_by_year(); note that a value of NaN is used for any date outside the range of a year specific dataset (e.g. total precipitation in 2023 will have NaN for the last values of 2022 and first values of 2024)
 
         df = pd.concat([feature_df, target_df], axis=1)
+        df.dropna(inplace=True)
+        #df.reset_index(inplace=True) # Convert the datetimes to a separate column named "index"
         
         folder_path = os.getcwd() + "/" + folder_name
         if not os.path.exists(folder_path):
