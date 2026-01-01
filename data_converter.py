@@ -106,14 +106,16 @@ class DatasetLoader:
         target_df.set_index("valid_time", inplace=True)
         target_new_cols = list(map(lambda x: f"{x}@({origin_lat},{origin_long})", list(target_df.columns))) # Target variables @ the origin (location of interest)
         target_df.columns = target_new_cols
+        # Remove any overlapping indicies resulting join_datasets_by_year(); note that a value of NaN is used for any date outside the range of a year specific dataset (e.g. total precipitation in 2023 will have NaN for the last values of 2022 and first values of 2024)
+        target_df.dropna(inplace=True)
         # Shift all values up by 1, since tp measures the accumulated precipitation from valid_time - 1hr to valid_time
+        full_year_dates = pd.date_range(start=target_df.index.min(), end=target_df.index.max(), freq="h")
+        target_df = target_df.reindex(full_year_dates) # Prevent shifting from September into May
         target_df = target_df.shift(-1)
         # Match rows to the rows of feature_df (accumulated vars contain extra rows at the beginning and end)
         start = feature_df.index[0]
         end = feature_df_subset.index[-1]
         target_df = target_df[start:end]
-        target_df.dropna(inplace=True) # Remove any overlapping indicies resulting join_datasets_by_year(); note that a value of NaN is used for any date outside the range of a year specific dataset (e.g. total precipitation in 2023 will have NaN for the last values of 2022 and first values of 2024)
-
         df = pd.concat([feature_df, target_df], axis=1)
         df.dropna(inplace=True)
         #df.reset_index(inplace=True) # Convert the datetimes to a separate column named "index"
