@@ -75,23 +75,13 @@ class DatasetLoader:
             long = coord[1]
             # Slice the xarray by lat & long
             feature_xarray_subset = feature_dataset.sel(dict(latitude=lat, longitude=long))
-            
             # Conversion to pandas dataframe
             feature_df_subset = feature_xarray_subset.to_dataframe()
-
-            # lat = feature_df_subset["latitude"].iloc[0] # Latitude/longitude values are the same for all rows in each subset, so the first value is chosen
-            # long = feature_df_subset["longitude"].iloc[0] # Feature and target datasets both utilize the same latitude and longitude points
-
             # Drop extra columns
             feature_df_subset = feature_df_subset.drop(columns=["surface", "step", "number", "valid_time", "latitude", "longitude"])
-
             # Format columns
             feature_new_cols = list(map(lambda x: f"{x}@({lat},{long})", list(feature_df_subset.columns))) # Each weather variable column name will be of the form 'weather_var@(latitude, longitude)'
             feature_df_subset.columns = feature_new_cols
-            
-            # Drop extra rows (for target dataset, since total precipitation is an accumulated variable)
-            
-
 
             feature_df_subsets.append(feature_df_subset)
 
@@ -118,7 +108,6 @@ class DatasetLoader:
         target_df = target_df[start:end]
         df = pd.concat([feature_df, target_df], axis=1)
         df.dropna(inplace=True)
-        #df.reset_index(inplace=True) # Convert the datetimes to a separate column named "index"
         
         folder_path = os.getcwd() + "/" + folder_name
         if not os.path.exists(folder_path):

@@ -37,31 +37,14 @@ class WeatherDataset(torch.utils.data.Dataset):
         dataset = {}
         while i + lookback + num_forecast_steps - 1 <= len(df):
             df_slice = df.iloc[i : i+lookback+num_forecast_steps-1] # slice containing rows i to i+lookback+num_forecast_steps-2
-            # bad_sequence = False
             timestep = df.index[i + lookback - 1] # Index of the time step to forecast for
-            # Check for bad sequences
-            # if timestep in invalid_timesteps:
-            #      bad_sequence = True
-                # presence = list(map(lambda x: x in df_slice.index, list(may_invalid_timesteps) + list(sept_invalid_timesteps))) 
-                # # If any values in presence are true, df_slice contains an invalid date
-                # if any(presence):
-                #     bad_sequence = True
-                #     break
 
-                # may_end = datetime.datetime(year, 5, 31, 23)
-                # sept_beg = datetime.datetime(year, 9, 1, 0)
-                # if (may_end in df_slice.index) and (sept_beg in df_slice.index):
-                #     # Resulting sequence will contain data from both May and September, skip such sequences
-                #     bad_sequence = True
-                #     break
-
-                
             # Check for bad sequences
             if timestep  not in invalid_timesteps:
                 feature_slice = df_slice.iloc[:lookback, :-1] # Exclude last column, which is the target
                 target_slice = df_slice.iloc[lookback-1:, -1] # Only include last (target) column
                 feature_tensor = torch.tensor(feature_slice.values.tolist())
-                feature_tensor = feature_tensor.reshape(-1,)
+                # feature_tensor = feature_tensor.reshape(-1,)
                 target_tensor = torch.tensor(target_slice.values.tolist())
                 dataset[n] = (timestep, feature_tensor, target_tensor)
                 n += 1
@@ -74,13 +57,11 @@ class WeatherDataset(torch.utils.data.Dataset):
 
 
     def __len__(self):
-        # n = len(self.df.index.year.unique()) + 1 # Number of splits in the data + 1 -> num of segments
-        # return len(self.df) - n*(self.lookback + self.num_forecast_steps - 2)
         return len(self.ds)
     
     def __getitem__(self, index):
-
         return self.ds[index][1], self.ds[index][2]
+
 
 if __name__ == "main":
     wds = WeatherDataset("CSV_Datasets", "16-sites__100-miles.csv", 24, 6)
