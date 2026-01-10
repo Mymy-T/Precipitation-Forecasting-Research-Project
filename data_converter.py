@@ -9,11 +9,46 @@ import xarray as xr
 # There is a separate file for each year for the surface data
 class DatasetLoader:
 
-    def join_datasets_by_year(self, datasets):
+    def __init__(self, load_folder, save_folder, pressures):
+        self.era5_folder_name = load_folder
+        self.csv_folder_name = save_folder
+        self.pressures = pressures
+
+    def join_datasets_by_year(self, datasets: dict):
         dataset_list = []
         for year in datasets.keys():
             dataset_list.append(datasets[year])
         return xr.concat(dataset_list, dim="time")
+    
+    def get_pressure_datasets(self, year):
+        datasets = []
+        for pressure in self.pressures:
+            path = os.getcwd() + f"/{self.era5_folder_name}/{pressure}hPa-{year}.grib"
+            pressure_ds = cfgrib.open_dataset(path)
+            pressure_ds = pressure_ds.drop_vars("isobaricInhPa") # Drop coordinate describing pressure level, since the pressure levels were downloaded on at a time for each pressure level and year
+            if pressure != 500: # For this specific project, all pressures other than 500 hPa have q, u, v data while 500 hPa contains vo data
+                pressure_ds = pressure_ds.rename({
+                    "q": f"q@{pressure}hPa",
+                    "u": f"u@{pressure}hPa",
+                    "v": f"v@{pressure}hPa"
+                })
+            else:
+                pressure_ds = pressure_ds.rename({
+                    "vo": f"vo@{pressure}hPa"
+                })
+            datasets.append(pressure_ds)
+        
+        return xr.merge(datasets, compat="no_conflicts")
+    
+    def get_surface_datasets(self, year):
+        """Returns surface features, target feature"""
+        surface_path = os.getcwd() + f"/{self.era5_folder_name}/{year}-full-surface-data.grib"
+        surface_datasets = cfgrib.open_datasets(surface_path) # first dataset contains the features, second contains target (tp, only accumulated var in this project)
+        return surface_datasets[0], surface_datasets[1]
+    
+    def combine_feature_datasets(self, surface_dataset, pressure_dataset):
+        return xr.merge([surface_dataset, pressure_dataset], compat="no_conflicts")
+
 
     def _convert_dist_to_coords(self, dist: float, origin: tuple):
         """The specified distance should be in miles, and the origin should be a tuple of the form (latitude, longitude);
@@ -25,13 +60,38 @@ class DatasetLoader:
         delta_lat = (180 * dist) / (math.pi * earth_radius_miles * math.sqrt(2))
         delta_long = (180 * dist) / (math.pi * earth_radius_miles * math.cos(origin_lat) * math.sqrt(2))
         return origin_lat - delta_lat, origin_lat + delta_lat, origin_long - delta_long, origin_long + delta_long
-
     
+
+    def _combine_wind_components(self, df, lat, long):
+        # Combine surface winds first
+        wind_components = [f"u10@({lat},{long})", f"v10@({lat},{long})"]
+        # indicies = []
+        # for i in len(columns):
+        #     if columns[i].startswith(wind_components):
+        #         indicies.append(i)
+        df[f"ws10@({lat},{long})"] = df.apply(lambda row: np.sqrt(row[wind_components[0]]**2 + row[wind_components[1]]**2), axis=1)
+        df.drop(wind_components, axis=1, inplace=True)
+        del wind_components
+        # del indicies
+
+        # Now, combine winds for pressure levels
+        for pressure in self.pressures:
+            if pressure != 500: # No wind speeds for 500 hPa pressure level
+                wind_components = [f"u@{pressure}hPa@({lat},{long})", f"v@{pressure}hPa@({lat},{long})"]
+                # indicies = []
+                # for i in len(columns):
+                #     if columns[i].startswith(wind_components):
+                #         indicies.append(i)
+                df[f"ws@{pressure}hPa@({lat},{long})"] = df.apply(lambda row: np.sqrt(row[wind_components[0]]**2 + row[wind_components[1]]**2), axis=1)
+                df.drop(wind_components, axis=1, inplace=True)
+        
+        return df
+
+
         
 
 
-
-    def save_dataframe(self, feature_dataset: xr.Dataset, target_dataset: xr.Dataset, num_points: int, dist: float, origin: tuple, folder_name = "CSV_Datasets"):
+    def save_dataframe(self, feature_dataset: xr.Dataset, target_dataset: xr.Dataset, num_points: int, dist: float, origin: tuple):
         """Creates a pandas dataframe from dataset; the resulting dataframe is saved as a csv;
             The default origin is set to the latitude and longitude coordinates of Blacksburg, VA;
             feature_dataset only contains ERA5 instantaneous variables, while target_dataset contains ERA5 total precipitation (accumulated variable)
@@ -82,6 +142,8 @@ class DatasetLoader:
             # Format columns
             feature_new_cols = list(map(lambda x: f"{x}@({lat},{long})", list(feature_df_subset.columns))) # Each weather variable column name will be of the form 'weather_var@(latitude, longitude)'
             feature_df_subset.columns = feature_new_cols
+            # Combine u & v wind components into a single wind speed feature (ws10@(lat, long), or ws@pressure@(lat, long))
+            feature_df_subset = self._combine_wind_components(feature_df_subset, lat, long)
 
             feature_df_subsets.append(feature_df_subset)
 
@@ -109,7 +171,7 @@ class DatasetLoader:
         df = pd.concat([feature_df, target_df], axis=1)
         df.dropna(inplace=True)
         
-        folder_path = os.getcwd() + "/" + folder_name
+        folder_path = os.getcwd() + "/" + self.csv_folder_name
         if not os.path.exists(folder_path):
             os.mkdir(folder_path)
 
@@ -118,24 +180,30 @@ class DatasetLoader:
 
         
     
-
-dsl = DatasetLoader()
 years = [2023, 2024]
+pressures = [925, 850, 700, 500]
+dsl = DatasetLoader(load_folder="ERA5_Data", save_folder="CompleteDatasets", pressures=pressures)
+
+# Get datasets for each year
 surface_feature_datasets = {}
+pressure_datasets = {}
 target_datasets = {}
 for year in years:
-    path = os.getcwd() + f"/ERA5_Data/{year}-full-surface-data.grib"
-    surface_datasets = cfgrib.open_datasets(path) # first dataset contains the features, second contains target (tp, only accumulated var in this project)
+    surface_feature_datasets[year], target_datasets[year] = dsl.get_surface_datasets(year)
+    pressure_datasets[year] = dsl.get_pressure_datasets(year)
 
-    surface_feature_datasets[year] = surface_datasets[0]
-    target_datasets[year] = surface_datasets[1]
-
-
+# Join by years
 surface_feature_dataset = dsl.join_datasets_by_year(surface_feature_datasets)
 del surface_feature_datasets
 target_dataset = dsl.join_datasets_by_year(target_datasets)
 del target_datasets
+pressure_dataset = dsl.join_datasets_by_year(pressure_datasets)
+del pressure_datasets
+
+feature_dataset = dsl.combine_feature_datasets(surface_dataset=surface_feature_dataset, pressure_dataset=pressure_dataset)
+del surface_feature_dataset
+del pressure_dataset
 
 for i in range(5):
     d = (i+1) * 100
-    dsl.save_dataframe(feature_dataset=surface_feature_dataset, target_dataset=target_dataset, num_points=16, dist=d, origin=(37.23, -80.42))
+    dsl.save_dataframe(feature_dataset=feature_dataset, target_dataset=target_dataset, num_points=10, dist=d, origin=(37.23, -80.42))

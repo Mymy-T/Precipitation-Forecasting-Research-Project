@@ -1,20 +1,25 @@
 import datetime
+import math
 import os
 import pandas as pd
 import torch
 
 class WeatherDataset(torch.utils.data.Dataset):
     # Datasets utilized for this project contain 2 years of data with data for the summer months removed.
-    def __init__(self, folder: str, file: str, lookback: int, num_forecast_steps: int):
+    def __init__(self, folder: str, num_sites: int, dist: int, lookback: int, num_forecast_steps: int, train: bool, max_zeros=7):
         super().__init__()
         self.lookback = lookback
         self.num_forecast_steps = num_forecast_steps
-        path = os.getcwd() + "/" + folder + "/" + file
+        if train:
+            path = os.getcwd() + "/" + folder + "/" + f"{num_sites}-sites__{dist}-miles__train.csv"
+        else:
+            path = os.getcwd() + "/" + folder + "/" + f"{num_sites}-sites__{dist}-miles__test.csv"
         # Loading the dataframe and converting it into a usable format for training
         df = pd.read_csv(path, index_col=0) # Use the first column as the index
         # Convert string indicies to timestamps
         date_index = list(map(pd.to_datetime, df.index.to_list()))
         df.index = date_index
+        # Transform variables (first training_proportion*100 percent of the data used as training data)
         years = df.index.year.unique()
         invalid_timesteps = []
         for year in years:
@@ -35,19 +40,22 @@ class WeatherDataset(torch.utils.data.Dataset):
         i = 0 # Index used within df
         n = 0 # Index of processed df;
         dataset = {}
-        while i + lookback + num_forecast_steps - 1 <= len(df):
+        while i + lookback + num_forecast_steps - 1 <= len(df): # The condition on the while cuts out the last few samples, as there aren't enough forecast steps
             df_slice = df.iloc[i : i+lookback+num_forecast_steps-1] # slice containing rows i to i+lookback+num_forecast_steps-2
             timestep = df.index[i + lookback - 1] # Index of the time step to forecast for
 
             # Check for bad sequences
-            if timestep  not in invalid_timesteps:
+            if timestep not in invalid_timesteps:
                 feature_slice = df_slice.iloc[:lookback, :-1] # Exclude last column, which is the target
                 target_slice = df_slice.iloc[lookback-1:, -1] # Only include last (target) column
                 feature_tensor = torch.tensor(feature_slice.values.tolist())
-                # feature_tensor = feature_tensor.reshape(-1,)
-                target_tensor = torch.tensor(target_slice.values.tolist())
-                dataset[n] = (timestep, feature_tensor, target_tensor)
-                n += 1
+                target_list = target_slice.values.tolist()
+                target_zeros = list(map(lambda x: x == 0, target_list))
+                num_zeros = sum(target_zeros)
+                if not num_zeros >= max_zeros: # the number of 0 tp values in forecast must be less than max_zeros
+                    target_tensor = torch.tensor(target_list)
+                    dataset[n] = (timestep, feature_tensor, target_tensor)
+                    n += 1
             
             i += 1
             
@@ -57,11 +65,11 @@ class WeatherDataset(torch.utils.data.Dataset):
 
 
     def __len__(self):
-        return len(self.ds)
+        #return len(self.ds)
+        return 100
     
     def __getitem__(self, index):
         return self.ds[index][1], self.ds[index][2]
 
 
-if __name__ == "main":
-    wds = WeatherDataset("CSV_Datasets", "16-sites__100-miles.csv", 24, 6)
+# wds = WeatherDataset("Split_Datasets", 16, 100, 24, 6, True)
