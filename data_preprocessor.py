@@ -43,7 +43,7 @@ class ClassificationDataPreprocessor:
             os.mkdir(folder_path)
 
         self.train_df.to_csv(folder_path + "/" + self.old_filename + "__train" + ".csv")
-        self.test_df.to_csv(folder_path + "/" +self.old_filename + "__test" + ".csv")
+        self.test_df.to_csv(folder_path + "/" + self.old_filename + "__test" + ".csv")
     
     def obtain_train_means(self):
         return self.train_means

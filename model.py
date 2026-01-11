@@ -3,7 +3,7 @@ import torch.nn as nn
 
 # Classification problem
 class Model(nn.Module):
-    def __init__(self, num_variables, num_locations, num_hiddens, forecast_steps, batch_size):
+    def __init__(self, num_variables, num_locations, num_hiddens, batch_size, forecast_steps=1):
         super().__init__()
         self.num_hiddens = num_hiddens
         self.batch_size = batch_size

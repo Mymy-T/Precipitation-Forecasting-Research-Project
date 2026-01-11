@@ -2,11 +2,12 @@ import datetime
 import math
 import os
 import pandas as pd
+import random
 import torch
 
-class WeatherDataset(torch.utils.data.Dataset):
+class PrecipitationClassificationDataset(torch.utils.data.Dataset):
     # Datasets utilized for this project contain 2 years of data with data for the summer months removed.
-    def __init__(self, folder: str, num_sites: int, dist: int, lookback: int, num_forecast_steps: int, train: bool, max_zeros=7):
+    def __init__(self, folder: str, num_sites: int, dist: int, lookback: int, train: bool, num_forecast_steps=1, oversample_num=0):
         super().__init__()
         self.lookback = lookback
         self.num_forecast_steps = num_forecast_steps
@@ -39,7 +40,7 @@ class WeatherDataset(torch.utils.data.Dataset):
 
         i = 0 # Index used within df
         n = 0 # Index of processed df;
-        dataset = {}
+        dataset = []
         while i + lookback + num_forecast_steps - 1 <= len(df): # The condition on the while cuts out the last few samples, as there aren't enough forecast steps
             df_slice = df.iloc[i : i+lookback+num_forecast_steps-1] # slice containing rows i to i+lookback+num_forecast_steps-2
             timestep = df.index[i + lookback - 1] # Index of the time step to forecast for
@@ -49,27 +50,30 @@ class WeatherDataset(torch.utils.data.Dataset):
                 feature_slice = df_slice.iloc[:lookback, :-1] # Exclude last column, which is the target
                 target_slice = df_slice.iloc[lookback-1:, -1] # Only include last (target) column
                 feature_tensor = torch.tensor(feature_slice.values.tolist())
-                target_list = target_slice.values.tolist()
-                target_zeros = list(map(lambda x: x == 0, target_list))
-                num_zeros = sum(target_zeros)
-                if not num_zeros >= max_zeros: # the number of 0 tp values in forecast must be less than max_zeros
-                    target_tensor = torch.tensor(target_list)
-                    dataset[n] = (timestep, feature_tensor, target_tensor)
-                    n += 1
+                target_tensor = torch.tensor(target_slice.values.tolist())
+                dataset.append((timestep, feature_tensor, target_tensor))
+                n += 1
             
             i += 1
-            
+        
+
+        if oversample_num != 0:
+            # Prepare for oversampling
+            minority_class_dataset = []
+            for data in dataset:
+                if data[-1].item() == 1.0:
+                    minority_class_dataset.append(data)
+            # Random oversampling
+            for _ in range(oversample_num):
+                random_data = random.choice(minority_class_dataset)
+                dataset.append(random_data)
                 
 
-        self.ds = dataset # Dictionary of the form {index: (timestep, features, targets)}
+        self.ds = dataset # Array with element of the form (timestep, features, targets)
 
 
     def __len__(self):
-        #return len(self.ds)
-        return 100
+        return len(self.ds)
     
     def __getitem__(self, index):
         return self.ds[index][1], self.ds[index][2]
-
-
-# wds = WeatherDataset("Split_Datasets", 16, 100, 24, 6, True)
