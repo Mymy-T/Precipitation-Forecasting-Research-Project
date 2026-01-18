@@ -33,6 +33,12 @@ class DatasetLoader:
                     "v": f"v@{pressure}hPa"
                 })
             else:
+                # Accidentally downloaded u and v components for 500hPa for 2021, 2022; no effect on other years
+                if "u" in pressure_ds:
+                    pressure_ds = pressure_ds.drop_vars("u")
+                if "v" in pressure_ds:
+                    pressure_ds = pressure_ds.drop_vars("v")
+
                 pressure_ds = pressure_ds.rename({
                     "vo": f"vo@{pressure}hPa"
                 })
@@ -58,8 +64,18 @@ class DatasetLoader:
         origin_long = origin[1]
         earth_radius_miles = 3959
         delta_lat = (180 * dist) / (math.pi * earth_radius_miles * math.sqrt(2))
-        delta_long = (180 * dist) / (math.pi * earth_radius_miles * math.cos(origin_lat) * math.sqrt(2))
+        delta_long = (180 * dist) / (math.pi * earth_radius_miles * math.cos(origin_lat * math.pi/180) * math.sqrt(2))
         return origin_lat - delta_lat, origin_lat + delta_lat, origin_long - delta_long, origin_long + delta_long
+    
+    def _convert_coords_to_dist(self, coord: tuple, origin: tuple):
+        origin_lat = origin[0]
+        origin_long = origin[1]
+        lat = coord[0]
+        long = coord[1]
+        earth_radius_miles = 3959
+        x_dist = earth_radius_miles * math.cos(origin_lat * math.pi/180) * abs(long - origin_long) * math.pi/180
+        y_dist = earth_radius_miles * abs(lat - origin_lat) * math.pi/180
+        return math.sqrt(x_dist**2 + y_dist**2)
     
 
     def _combine_wind_components(self, df, lat, long):
@@ -87,10 +103,6 @@ class DatasetLoader:
         
         return df
 
-
-        
-
-
     def save_dataframe(self, feature_dataset: xr.Dataset, target_dataset: xr.Dataset, num_points: int, dist: float, origin: tuple):
         """Creates a pandas dataframe from dataset; the resulting dataframe is saved as a csv;
             The default origin is set to the latitude and longitude coordinates of Blacksburg, VA;
@@ -117,6 +129,8 @@ class DatasetLoader:
         lat_points = lat_points[lat_points < high_lat_bound]
         long_points = long_points[long_points > low_long_bound]
         long_points = long_points[long_points < high_long_bound]
+        print(f"Num lat points for dist {dist} = {len(lat_points)}")
+        print(f"Num long points for dist {dist} = {len(long_points)}")
         
         i = 0
         while i < (num_points - 1): # Selected num_points - 1 extra points in addition to the origin point
@@ -128,6 +142,9 @@ class DatasetLoader:
             else:
                 continue
         
+        # Sort the coordinates by pythagorean distance to the origin in ascending order
+        coords = sorted(coords, key=lambda x: self._convert_coords_to_dist(x, origin))
+
         feature_df_subsets = []
         for coord in coords:
             # Each feature subset contains the feature data for a coordinate
@@ -168,6 +185,7 @@ class DatasetLoader:
         start = feature_df.index[0]
         end = feature_df_subset.index[-1]
         target_df = target_df[start:end]
+        # target_df.dropna(inplace=True)
         df = pd.concat([feature_df, target_df], axis=1)
         df.dropna(inplace=True)
         
@@ -180,9 +198,9 @@ class DatasetLoader:
 
         
     
-years = [2023, 2024]
+years = [2021, 2022, 2023, 2024]
 pressures = [925, 850, 700, 500]
-dsl = DatasetLoader(load_folder="ERA5_Data", save_folder="CompleteDatasets", pressures=pressures)
+dsl = DatasetLoader(load_folder="ERA5_Data", save_folder="Large_CSV_Datasets", pressures=pressures)
 
 # Get datasets for each year
 surface_feature_datasets = {}
@@ -192,12 +210,14 @@ for year in years:
     surface_feature_datasets[year], target_datasets[year] = dsl.get_surface_datasets(year)
     pressure_datasets[year] = dsl.get_pressure_datasets(year)
 
+
 # Join by years
 surface_feature_dataset = dsl.join_datasets_by_year(surface_feature_datasets)
 del surface_feature_datasets
 target_dataset = dsl.join_datasets_by_year(target_datasets)
 del target_datasets
 pressure_dataset = dsl.join_datasets_by_year(pressure_datasets)
+
 del pressure_datasets
 
 feature_dataset = dsl.combine_feature_datasets(surface_dataset=surface_feature_dataset, pressure_dataset=pressure_dataset)
@@ -205,5 +225,5 @@ del surface_feature_dataset
 del pressure_dataset
 
 for i in range(5):
-    d = (i+1) * 100
+    d = 50 + (i * 25)
     dsl.save_dataframe(feature_dataset=feature_dataset, target_dataset=target_dataset, num_points=10, dist=d, origin=(37.23, -80.42))

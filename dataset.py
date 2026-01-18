@@ -1,18 +1,27 @@
 import datetime
+from enum import Enum
 import math
 import os
 import pandas as pd
 import random
 import torch
 
+class DatasetType(Enum):
+    train = 0
+    validation = 1
+    test = 2
+    
+
 class PrecipitationClassificationDataset(torch.utils.data.Dataset):
     # Datasets utilized for this project contain 2 years of data with data for the summer months removed.
-    def __init__(self, folder: str, num_sites: int, dist: int, lookback: int, train: bool, num_forecast_steps=1, oversample_num=0):
+    def __init__(self, folder: str, num_sites: int, dist: int, lookback: int, dataset_type: DatasetType, num_forecast_steps=1, oversample_num=0):
         super().__init__()
         self.lookback = lookback
         self.num_forecast_steps = num_forecast_steps
-        if train:
+        if dataset_type == DatasetType.train:
             path = os.getcwd() + "/" + folder + "/" + f"{num_sites}-sites__{dist}-miles__train.csv"
+        elif dataset_type == DatasetType.validation:
+            path = os.getcwd() + "/" + folder + "/" + f"{num_sites}-sites__{dist}-miles__valid.csv"
         else:
             path = os.getcwd() + "/" + folder + "/" + f"{num_sites}-sites__{dist}-miles__test.csv"
         # Loading the dataframe and converting it into a usable format for training

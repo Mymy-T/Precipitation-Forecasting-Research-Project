@@ -2,7 +2,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import os
 import pandas as pd
-import preprocessor
+import data_preprocessor
 
 # df["t2m_diff"] = df["t2m@(37.11,-80.34)"] - df["t2m@(37.11,-80.34)"].shift(1)
 # df["sp_diff"] = df["sp@(37.11,-80.34)"] - df["sp@(37.11,-80.34)"].shift(1)
@@ -24,32 +24,20 @@ def histogram(df, feature, ratio):
     plt.title(f"Histogram of {feature} by dry/wet days; wet/dry day ratio = {ratio}")
     plt.show()
 
-# def histograms(df, features):
-#     fig, axes = plt.subplots(nrows=3, ncols=3, figsize=(8,6))
+
+
+# def kdeplot(features):
+#     fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(12, 10))
 #     axes = axes.flatten()
-#     for i, col in enumerate(features[0:8]):
-#         sns.histplot(data=df, x=col, hue='tp@(37.11,-80.34)', multiple="stack")
+
+#     for i, col in enumerate(features[0:4]):
+#         sns.kdeplot(data=df, x=col, hue='tp@(37.11,-80.34)', fill=True, ax=axes[i], palette='viridis')
 #         axes[i].set_title(f'Distribution of {col}: Wet vs Dry')
 #         axes[i].set_xlabel(f'{col}')
-#         axes[i].set_ylabel(f'Count')
-    
+#         axes[i].set_ylabel('Density')
+
 #     plt.tight_layout()
 #     plt.show()
-
-
-
-def kdeplot(features):
-    fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(12, 10))
-    axes = axes.flatten()
-
-    for i, col in enumerate(features[0:4]):
-        sns.kdeplot(data=df, x=col, hue='tp@(37.11,-80.34)', fill=True, ax=axes[i], palette='viridis')
-        axes[i].set_title(f'Distribution of {col}: Wet vs Dry')
-        axes[i].set_xlabel(f'{col}')
-        axes[i].set_ylabel('Density')
-
-    plt.tight_layout()
-    plt.show()
 
 features = ["q@925hPa@(37.11,-80.34)", "q@850hPa@(37.11,-80.34)", "q@700hPa@(37.11,-80.34)", "d2m@(37.11,-80.34)",
             "sp@(37.11,-80.34)", "t2m@(37.11,-80.34)", "vo@500hPa@(37.11,-80.34)", "ws10@(37.11,-80.34)",
@@ -57,7 +45,7 @@ features = ["q@925hPa@(37.11,-80.34)", "q@850hPa@(37.11,-80.34)", "q@700hPa@(37.
 
 
 def get_processed_datasets(folder="TestDatasets"):
-    dp = preprocessor.DataPreprocessor(0.8, "CompleteDatasets", 10, 100, folder, ["ws10@", "ws@925", "ws@850", "ws@700"])
+    dp = data_preprocessor.DataPreprocessor(0.7, "CompleteDatasets", 10, 100, folder, ["ws10@", "ws@925", "ws@850", "ws@700"])
     dp.save_standardized_train_test_datasets()
     return pd.read_csv(os.getcwd() + "/TestDatasets/10-sites__100-miles__train.csv", index_col=0)
 

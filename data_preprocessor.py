@@ -3,11 +3,12 @@ import os
 import pandas as pd
 
 class ClassificationDataPreprocessor:
-    def __init__(self, train_proportion: float, original_folder: str, num_sites: int, dist: int, new_folder: str, features_to_drop):
+    def __init__(self, train_proportion: float, valid_proportion: float, original_folder: str, num_sites: int, dist: int, new_folder: str, features_to_drop):
         old_filename = f"{num_sites}-sites__{dist}-miles"
         path = os.getcwd() + "/" + original_folder + "/" + old_filename + ".csv"
         df = pd.read_csv(path, index_col=0) # Use the first column as the index
-        split_index = math.floor(train_proportion * len(df.index))
+        valid_split_index = math.floor(train_proportion * len(df.index))
+        test_split_index = math.floor((train_proportion + valid_proportion) * len(df.index))
 
         # Drop some features
         cols_to_drop = []
@@ -19,13 +20,15 @@ class ClassificationDataPreprocessor:
         df.drop(cols_to_drop, axis=1, inplace=True)
 
         # For access in other funcs
-        self.train_df = df.iloc[:split_index, :]
-        self.test_df = df.iloc[split_index:, :]
+        self.train_df = df.iloc[:valid_split_index-1, :]
+        self.valid_df = df.iloc[valid_split_index:test_split_index-1, :]
+        self.test_df = df.iloc[test_split_index:, :]
         self.old_filename = old_filename
         self.new_folder = new_folder
 
         # Measure tp in mm
         self.train_df.iloc[:, -1] = self.train_df.iloc[:, -1].apply(lambda x: 1000*x)
+        self.valid_df.iloc[:, -1] = self.valid_df.iloc[:, -1].apply(lambda x: 1000*x)
         self.test_df.iloc[:, -1] = self.test_df.iloc[:, -1].apply(lambda x: 1000*x)
 
         # These store the means and stdevs for each column in train_df; used to standardize the data
@@ -43,6 +46,7 @@ class ClassificationDataPreprocessor:
             os.mkdir(folder_path)
 
         self.train_df.to_csv(folder_path + "/" + self.old_filename + "__train" + ".csv")
+        self.valid_df.to_csv(folder_path + "/" + self.old_filename + "__valid" + ".csv")
         self.test_df.to_csv(folder_path + "/" + self.old_filename + "__test" + ".csv")
     
     def obtain_train_means(self):
@@ -56,6 +60,7 @@ class ClassificationDataPreprocessor:
         """Use this function to save the standardized train and test datasets;
         After being saved, the standardized datasets can be loaded by the WeatherDataset class"""
         train_df = self.train_df
+        valid_df = self.valid_df
         test_df = self.test_df
 
         # Both train & test datasets have the same columns
@@ -63,10 +68,12 @@ class ClassificationDataPreprocessor:
         # Standardize features
         for col in train_df.columns[:-1]:
             train_df[col] = train_df[col].apply(lambda x: (x - self.train_means[col]) / self.train_stdevs[col])
+            valid_df[col] = valid_df[col].apply(lambda x: (x - self.train_means[col]) / self.train_stdevs[col])
             test_df[col] = test_df[col].apply(lambda x: (x - self.train_means[col]) / self.train_stdevs[col])
 
         # Convert dry days to 0 and wet days to 1
         train_df.iloc[:, -1] = train_df.iloc[:, -1].apply(lambda x: 0 if x < 0.05 else 1)
+        valid_df.iloc[:, -1] = valid_df.iloc[:, -1].apply(lambda x: 0 if x < 0.05 else 1)
         test_df.iloc[:, -1] = test_df.iloc[:, -1].apply(lambda x: 0 if x < 0.05 else 1)
 
         folder_path = os.getcwd() + "/" + self.new_folder
@@ -74,4 +81,5 @@ class ClassificationDataPreprocessor:
             os.mkdir(folder_path)
 
         train_df.to_csv(folder_path + "/" + self.old_filename + "__train" + ".csv")
-        test_df.to_csv(folder_path + "/" +self.old_filename + "__test" + ".csv")
+        valid_df.to_csv(folder_path + "/" + self.old_filename + "__valid" + ".csv")
+        test_df.to_csv(folder_path + "/" + self.old_filename + "__test" + ".csv")
