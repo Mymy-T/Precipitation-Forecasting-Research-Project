@@ -14,18 +14,20 @@ class DatasetType(Enum):
 
 class PrecipitationClassificationDataset(torch.utils.data.Dataset):
     # Datasets utilized for this project contain 2 years of data with data for the summer months removed.
-    def __init__(self, folder: str, num_sites: int, dist: int, lookback: int, dataset_type: DatasetType, num_forecast_steps=1, oversample_num=0):
+    def __init__(self, folder: str, num_sites: int, dist: int, lookback: int, dataset_type: DatasetType, block_num: int, num_forecast_steps=1, oversample_num=0):
+        """block_num param should be indexed from 1 when passed in"""
         super().__init__()
         self.lookback = lookback
         self.num_forecast_steps = num_forecast_steps
+        path = os.getcwd() + f"/{folder}/Block_{block_num}/{num_sites}-sites__{dist}-miles__"
         if dataset_type == DatasetType.train:
-            path = os.getcwd() + "/" + folder + "/" + f"{num_sites}-sites__{dist}-miles__train.csv"
+            filepath = path + "train.csv"
         elif dataset_type == DatasetType.validation:
-            path = os.getcwd() + "/" + folder + "/" + f"{num_sites}-sites__{dist}-miles__valid.csv"
+            filepath = path + "valid.csv"
         else:
-            path = os.getcwd() + "/" + folder + "/" + f"{num_sites}-sites__{dist}-miles__test.csv"
+            filepath = path + "test.csv"
         # Loading the dataframe and converting it into a usable format for training
-        df = pd.read_csv(path, index_col=0) # Use the first column as the index
+        df = pd.read_csv(filepath, index_col=0) # Use the first column as the index
         # Convert string indicies to timestamps
         date_index = list(map(pd.to_datetime, df.index.to_list()))
         df.index = date_index
