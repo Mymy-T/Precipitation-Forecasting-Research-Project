@@ -1,5 +1,11 @@
 import torch
 
+def compute_f1(tp, fn, fp):
+    denom = 2 * tp + fn + fp
+    if denom == 0:
+        return 0.0
+    return 2 * tp / denom
+
 class Trainer:
     def __init__(self, dataloaders, model, loss_fn, optimizer, grad_clip, printing_metrics):
         self.train_dataloader, self.valid_dataloader, self.test_dataloader = dataloaders
@@ -19,7 +25,7 @@ class Trainer:
                 pred_class = 1
             else:
                 pred_class = 0
-            
+
             if (pred_class == 0) and (target[i] == 1):
                 false_negatives += 1
             elif (pred_class == 1) and (target[i] == 0):
@@ -28,12 +34,12 @@ class Trainer:
                 true_negatives += 1
             elif (pred_class == 1) and (target[i] == 1):
                 true_positives += 1
-        
+
         return false_negatives, false_positives, true_negatives, true_positives
 
 
 
-    
+
     def train_loop(self):
         self.model.train()
         total_loss = 0
@@ -60,14 +66,14 @@ class Trainer:
                     print(loss.item())
         avg_loss = total_loss / len(self.train_dataloader)
         accuracy = (tn_tot + tp_tot) / (len(self.train_dataloader) * prob_pred.shape[0])
-        f1 = 2*tp_tot / (2*tp_tot + fn_tot + fp_tot)
+        f1 = compute_f1(tp_tot, fn_tot, fp_tot)
         if self.printing:
             print(f"Train Loss: {avg_loss}")
             print(f"Train Accuracy: {accuracy * 100}%")
             print(f"Train f1: {f1}")
         return avg_loss, accuracy, f1
-               
-    
+
+
     def test_loop(self, valid):
         self.model.eval()
         if valid:
@@ -94,14 +100,14 @@ class Trainer:
                 tp_tot += tp
             avg_loss = total_loss / len(dl) # tot_loss divided by num batches
             accuracy = (tn_tot + tp_tot) / (len(dl) * prob_pred.shape[0])
-            f1 = 2*tp_tot / (2*tp_tot + fn_tot + fp_tot)
+            f1 = compute_f1(tp_tot, fn_tot, fp_tot)
             if self.printing:
                 print(f"{name} Loss: {avg_loss}")
                 print(f"{name} Accuracy: {accuracy * 100}%")
                 print(f"{name} f1: {f1}")
             return avg_loss, accuracy, f1
-        
-    
+
+
     def baseline_loop(self):
         total_loss = 0
         fn_tot = 0
@@ -120,13 +126,13 @@ class Trainer:
             tp_tot += tp
         avg_loss = total_loss / len(self.test_dataloader) # tot_loss divided by num batches
         accuracy = (tn_tot + tp_tot) / (len(self.test_dataloader) * prob_pred.shape[0])
-        f1 = 2*tp_tot / (2*tp_tot + fn_tot + fp_tot)
+        f1 = compute_f1(tp_tot, fn_tot, fp_tot)
         if self.printing:
             print(f"Basline avg loss per batch test set: {avg_loss}")
             print(f"Baseline Accuracy: {accuracy * 100}%")
             print(f"Baseline f1: {f1}")
         return avg_loss, accuracy, f1
-    
+
     def random_guessing_loop(self):
         fn_tot = 0
         fp_tot = 0
@@ -139,12 +145,10 @@ class Trainer:
             fp_tot += fp
             tn_tot += tn
             tp_tot += tp
-        
+
         accuracy = (tn_tot + tp_tot) / (len(self.test_dataloader) * prob_pred.shape[0])
-        f1 = 2*tp_tot / (2*tp_tot + fn_tot + fp_tot)
+        f1 = compute_f1(tp_tot, fn_tot, fp_tot)
         if self.printing:
             print(f"Random Accuracy: {accuracy * 100}%")
             print(f"Random f1: {f1}")
         return accuracy, f1
-
-

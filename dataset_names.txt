@@ -1,5 +1,0 @@
-For this project, the datasets directly downloaded from ECMWF are stored in the folder called "ERA5_Data". These datasets are in .grib format.
-
-The "DatasetLoader" class provides functions to process this .grib and store it. Processed data is stored in a csv format within a folder named with the value of the variable 'CSV_FOLDER_NAME' in train_script.py.
-
-The "DataPreprocessor" class provides functions to standardize and split the stored csv datasets into train and test datasets. The resulting standardized train and test datasets are stored in a folder named with the value of the variable 'PROCESSED_CSV_FOLDER_NAME' in train_script.py.

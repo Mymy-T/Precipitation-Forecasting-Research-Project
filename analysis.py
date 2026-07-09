@@ -1,119 +1,82 @@
-import math
+import os
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import os
-import re
-from scipy.stats import shapiro, levene, dunnett, tukey_hsd
-import statsmodels.api as sm
-from statsmodels.formula.api import ols, rlm
+import scikit_posthocs as sp
+from scipy.stats import kruskal
+
+RESULTS_PATH = "redo_results.csv"
+NUM_LOCATIONS = [4, 7, 10]
+DISTS = [50, 75, 100, 125, 150]
+
+df = pd.read_csv(os.getcwd() + "/" + RESULTS_PATH)
+
+control_df = df[df["num_locations"] == 1]
+treatment_df = df[df["num_locations"] != 1]
+
+# Aggregate seed (training-noise) replicates within each independent location draw, leaving exactly one
+# F1 per (num_locations, dist, draw_id) -- the true independent unit of replication in this redesign.
+draw_means = (
+    treatment_df.groupby(["num_locations", "dist", "draw_id"])["F1"]
+    .mean()
+    .reset_index()
+)
+
+# Control has no location-draw axis at all (there's only one possible "1-location" dataset: the origin
+# point itself), so its 3 replicates are its 3 seeds directly, left unaggregated. This is an intentional
+# asymmetry: control's spread reflects training-noise only, while every other cell's spread reflects
+# genuine location-sampling variance (seed noise has already been averaged out of it).
+group_labels = ["control"] + [f"{n},{d}" for n in NUM_LOCATIONS for d in DISTS]
+groups = {"control": control_df["F1"].to_numpy()}
+for n in NUM_LOCATIONS:
+    for d in DISTS:
+        subset = draw_means[(draw_means["num_locations"] == n) & (draw_means["dist"] == d)]
+        groups[f"{n},{d}"] = subset["F1"].to_numpy()
+
+group_arrays = [groups[label] for label in group_labels]
+
+print("Per-cell summary (n, mean, sd):")
+for label, arr in zip(group_labels, group_arrays):
+    sd = np.std(arr, ddof=1) if len(arr) > 1 else float("nan")
+    print(f"  {label:>10}: n={len(arr)}, mean={np.mean(arr):.4f}, sd={sd:.4f}")
+
+# --- Omnibus test -----------------------------------------------------------------------------
+# Kruskal-Wallis (rank-based) instead of parametric two-way ANOVA. At n=3-5 per group, Shapiro-Wilk /
+# Levene pre-checks (as the original paper ran) have very little power to actually detect non-normality
+# or unequal variance, so committing up front to a method that doesn't assume either is more honest than
+# "test assumptions, then pick a method" at this sample size.
+stat, p = kruskal(*group_arrays)
+print(f"\nKruskal-Wallis: H = {stat:.4f}, p = {p:.5f} (n groups = {len(group_arrays)})")
+
+# --- Post-hoc ----------------------------------------------------------------------------------
+# Dunn's test with Holm correction replaces both Dunnett's test (control vs. each treatment cell) and
+# Tukey's HSD (pairwise among treatment cells) from the original pipeline -- one rank-based procedure
+# that handles the unequal group sizes here (control n=3, every other cell n=5) without difficulty.
+long_df = pd.concat(
+    [pd.DataFrame({"group": label, "F1": arr}) for label, arr in zip(group_labels, group_arrays)],
+    ignore_index=True,
+)
+dunn_result = sp.posthoc_dunn(long_df, val_col="F1", group_col="group", p_adjust="holm")
+print("\nDunn's test (Holm-corrected) p-value matrix:")
+print(dunn_result.round(4))
+
+print("\nControl vs. each cell (Dunnett-style contrasts), sorted by p-value:")
+print(dunn_result["control"].drop("control").sort_values().round(4))
 
 
-def create_residual_vs_fit_graph(groups):
-    """Residual vs fit plot - graphically check for homogeneity of variance"""
+def create_profile_plot():
+    """Mean F1 per num_locations across distance bounds, averaged over the 5 independent location draws."""
     _, ax = plt.subplots(nrows=1, figsize=(10, 8))
-    # Residual vs Fit - Homogeneity of variance
-    means = [] # There will be duplicate values, 10 for each group
-    residuals = []
-    mean_residuals = []
-    ranges = [] # IQRs of residuals, not means
-    for group in groups:
-        mean = np.mean(group)
-        current_residuals = []
-        for x in group:
-            means.append(mean)
-            current_residuals.append(x - mean)
-        ql, qh = np.percentile(current_residuals, [20, 80])
-        range = qh - ql
-        ranges.append(range)
-        mean_residuals.append(np.median(current_residuals))
-        for curr_res in current_residuals:
-            residuals.append(curr_res)
-    unique_means = list(set(means))
-    ranges = [x/2 for x in ranges] # Halve each iqr for plotting
-    ax.set_title("Residual vs Fitted Values")
-    ax.scatter(means, residuals, color="blue")
-    ax.errorbar(unique_means, mean_residuals, yerr=ranges, fmt="o", ecolor="red", color="red", capsize=0)
-    ax.axhline(y=0, color="green", linestyle="--")
-    ax.set_xlabel("Fitted Values (Group Means)")
-    ax.set_ylabel("Residuals")
-
-def create_profile_plot(num_locs, dists, results):
-    """Num_locs distinguished by color, dists distinguished by x axis"""
-    c_label = "Number of Locations"
-    x_label = "Distance Bounds (miles)"
-    c_vars = num_locs
-    x_vars = dists
-    # num_locations_pattern = r"^\d"
-    # distance_pattern = r"\d+$"
-    # nums_locations = []
-    # dists = []
-    # for key, val in results.items():
-    #     num_locations = int(re.search(num_locations_pattern, key).group())
-    #     dist = int(re.search(distance_pattern, key).group())
-    #     nums_locations.append(num_locations)
-    #     dists.append(dist)
+    ax.set_title("Profile Plot (redesigned experiment)")
+    for n in NUM_LOCATIONS:
+        means = [np.mean(groups[f"{n},{d}"]) for d in DISTS]
+        ax.plot(DISTS, means, marker="o", linestyle="--", label=str(n))
+    ax.axhline(y=np.mean(groups["control"]), color="grey", linestyle=":", label="control (1 location)")
+    ax.set_xlabel("Distance Bounds (miles)")
+    ax.set_ylabel("Mean F1 Score (averaged over 5 independent location draws)")
+    ax.legend(title="Number of Locations")
 
 
-    fig, ax = plt.subplots(nrows=1, figsize=(10, 8))
-    ax.set_title("Profile Plot")
-    for c_var in c_vars:
-        means = []
-        for x_var in x_vars:
-            key = f"{c_var},{x_var}"
-            mean = np.mean(results[key])
-            means.append(mean)
-        ax.plot(x_vars, means, marker="o", linestyle="--", label=f"{c_var}")
-    ax.set_xlabel(x_label)
-    ax.set_ylabel("Mean F1 Score")
-    ax.legend(title=c_label)
-
-df = pd.read_csv(os.getcwd() + "/results.csv")
-# df = df[df["Num_Loc"] != 1]
-
-
-### ANOVA Analysis Setup
-
-num_locs = [4, 7, 10]
-dists = [50, 75, 100, 125, 150]
-results = {}
-for num_loc in num_locs:
-    for dist in dists:
-        df_subset = df[df["Num_Loc"] == num_loc]
-        df_subset = df_subset[df_subset["Dist"] == dist]
-        df_subset = df_subset["F1"]
-        results[f"{num_loc},{dist}"] = df_subset.to_numpy()
-groups = list(results.values())
-
-# Check Assumptions
-# Homogeneity of variance
-levene_p = levene(*groups).pvalue
-print(f"Levene's test resulted in a p value of {levene_p}")
-create_residual_vs_fit_graph(groups)
-# Normality
-shapiro_p_vals = [shapiro(group).pvalue for group in groups]
-non_normal_count = 0
-for p in shapiro_p_vals:
-    if p < 0.05:
-        non_normal_count += 1
-print(f"Shapiro-Wilks test resulted in a p value < 0.05 for {non_normal_count} out of {len(shapiro_p_vals)} groups")
-
-# Dunnett's test against control
-control_subset = df[df["Num_Loc"] == 1]
-control = control_subset["F1"].to_numpy()
-print(dunnett(*groups, control=control))
-
-# Create ANOVA Table
-df = df[df["Num_Loc"] != 1] # Drop the control group
-lm = ols('F1 ~ C(Num_Loc)*C(Dist)', data=df).fit()
-table = sm.stats.anova_lm(lm)
-print(table)
-create_profile_plot(num_locs, dists, results)
-
-# Tukey's HSD Analysis
-print(tukey_hsd(*groups))
-for i in range(len(groups)):
-    print(f"Group #{i}: {np.mean(groups[i])}")
-
-
+create_profile_plot()
 plt.show()

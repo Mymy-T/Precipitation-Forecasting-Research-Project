@@ -13,20 +13,21 @@ class DatasetType(Enum):
     
 
 class PrecipitationClassificationDataset(torch.utils.data.Dataset):
-    # Datasets utilized for this project contain 2 years of data with data for the summer months removed.
-    def __init__(self, folder: str, num_sites: int, dist: int, lookback: int, dataset_type: DatasetType, block_num: int, num_forecast_steps=1, oversample_num=0):
-        """block_num param should be indexed from 1 when passed in"""
+    # Datasets utilized for this project contain years of data with data for the summer months removed
+    def __init__(self, folder: str, file_label: str, lookback: int, dataset_type: DatasetType, num_forecast_steps=1):
+        """file_label identifies each draw of data points within each combination, e.g. '10-sites__50-miles__draw3'"""
         super().__init__()
         self.lookback = lookback
         self.num_forecast_steps = num_forecast_steps
-        path = os.getcwd() + f"/{folder}/Block_{block_num}/{num_sites}-sites__{dist}-miles__"
         if dataset_type == DatasetType.train:
-            filepath = path + "train.csv"
+            filename = file_label + "__train.csv"
         elif dataset_type == DatasetType.validation:
-            filepath = path + "valid.csv"
+            filename = file_label + "__valid.csv"
         else:
-            filepath = path + "test.csv"
-        # Loading the dataframe and converting it into a usable format for training
+            filename = file_label + "__test.csv"
+        filepath = os.path.join(os.getcwd(), folder, filename)
+
+        # Load the dataframe and converting it into a usable format for training
         df = pd.read_csv(filepath, index_col=0) # Use the first column as the index
         # Convert string indicies to timestamps
         date_index = list(map(pd.to_datetime, df.index.to_list()))
@@ -50,7 +51,6 @@ class PrecipitationClassificationDataset(torch.utils.data.Dataset):
                 invalid_timesteps += (list(may_invalid_timesteps) + list(sept_invalid_timesteps))
 
         i = 0 # Index used within df
-        n = 0 # Index of processed df;
         dataset = []
         while i + lookback + num_forecast_steps - 1 <= len(df): # The condition on the while cuts out the last few samples, as there aren't enough forecast steps
             df_slice = df.iloc[i : i+lookback+num_forecast_steps-1] # slice containing rows i to i+lookback+num_forecast_steps-2
@@ -63,24 +63,9 @@ class PrecipitationClassificationDataset(torch.utils.data.Dataset):
                 feature_tensor = torch.tensor(feature_slice.values.tolist())
                 target_tensor = torch.tensor(target_slice.values.tolist())
                 dataset.append((timestep, feature_tensor, target_tensor))
-                n += 1
-            
             i += 1
-        
-
-        if oversample_num != 0:
-            # Prepare for oversampling
-            minority_class_dataset = []
-            for data in dataset:
-                if data[-1].item() == 1.0:
-                    minority_class_dataset.append(data)
-            # Random oversampling
-            for _ in range(oversample_num):
-                random_data = random.choice(minority_class_dataset)
-                dataset.append(random_data)
                 
-
-        self.ds = dataset # Array with element of the form (timestep, features, targets)
+        self.ds = dataset # Array with elements of the form (timestep, features, targets); both features and targets are tensors
 
 
     def __len__(self):
