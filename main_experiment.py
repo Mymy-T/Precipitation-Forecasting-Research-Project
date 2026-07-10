@@ -3,10 +3,8 @@ from performance_log_manager import PerformanceLogManager, ExperimentType
 import sys
 import variables
 
-# TODO: Continue debugging new pipeline
-
 def main():
-    # Ensure the use runs this file from the right directory
+    # Ensure the user runs this file from the right directory
     terminal_dir = os.path.abspath(os.getcwd())
     script_dir = os.path.dirname(os.path.abspath(__file__))
     if terminal_dir != script_dir:

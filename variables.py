@@ -32,7 +32,7 @@ class HyperparameterTestingConfig:
     MODEL_SAVE_FOLDER: str = "Hyperparameter_Testing_Models"
     RUNS_FOLDER: str = "Hyperparameter_Testing_Runs"
     RESULTS_PATH: str = "hyperparameter_testing_results.csv"
-    RESULTS_COLUMNS: list[str] = field(default_factory=lambda: ["num_locations", "lookback", "num_hiddens", "weight_decay", "F1"]) # Output file columns; can be renamed, but order and length CANNOT be changed
+    RESULTS_COLUMNS: list[str] = field(default_factory=lambda: ["num_locations", "lookback", "num_hiddens", "weight_decay", "valid_F1", "F1"]) # Output file columns; can be renamed, not reordered or reshaped
 
     # These 3 are the possible hyperparams for testing; unique to HyperparameterTestingConfig
     LOOKBACKS: list[int] = field(default_factory=lambda: [5, 12, 24]) # Test all lookbacks with num_hiddens default = 64 and weight_decay default = 0 first; select best
@@ -45,7 +45,7 @@ class MainConfig:
     MODEL_SAVE_FOLDER: str = "Models"
     RUNS_FOLDER: str = "Runs"
     RESULTS_PATH: str = "results.csv"
-    RESULTS_COLUMNS: list[str] = field(default_factory=lambda: ["num_locations", "dist", "draw_num", "seed", "F1"]) # Output file columns; can be renamed, but order and length CANNOT be changed
+    RESULTS_COLUMNS: list[str] = field(default_factory=lambda: ["num_locations", "dist", "draw_num", "seed", "F1"]) # Output file columns; can be renamed, but not reordered or reshaped
 
     # These 3 are changed with hyperparameter selection; unique to MainConfig
     LOOKBACK: int = 5 # LOOKBACK - 1 hours before, since data for current timestep is included
