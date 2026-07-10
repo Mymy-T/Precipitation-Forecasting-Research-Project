@@ -4,6 +4,40 @@ import numpy as np
 import os
 import pandas as pd
 import xarray as xr
+import variables
+
+def main():
+    data_config = variables.DataConfig()
+    experiment_config = variables.ExperimentConfig()
+
+    # For each num_locations and distance combination, draw num_draws site sets
+    dsl = DatasetLoader(load_folder=data_config.GRIB_DATA_FOLDER_NAME, save_folder=data_config.CSV_FOLDER_NAME, pressures=data_config.PRESSURES)
+    feature_dataset, target_dataset = _build_full_feature_target_datasets(dsl, data_config.YEARS)
+
+    dataset_metadata_rows = []
+
+    # The control is a single dataset containing only the origin point (no extra draws needed)
+    control_coords = dsl.draw_coords(feature_dataset, num_points=1, dist=experiment_config.DISTS[0], origin=experiment_config.ORIGIN, rng=np.random.default_rng(0))
+    control_file_label = variables.generate_file_label(num_locations=1)
+    dsl.save_dataframe(feature_dataset, target_dataset, coords=control_coords, origin=experiment_config.ORIGIN, file_label=control_file_label)
+    dataset_metadata_rows.append({"num_locations": 1, "dist": None, "draw_num": None, "seed": None, "coords": control_coords})
+
+    for dist in experiment_config.DISTS:
+        for num_locations in experiment_config.NUM_LOCATIONS:
+            for draw_num in range(1, experiment_config.NUM_DRAWS + 1):
+                # draw_num is a unique seed within every combination of num_locations and dist
+                seed = dist * 10_000 + num_locations * 100 + draw_num
+                rng = np.random.default_rng(seed)
+                coords = dsl.draw_coords(feature_dataset, num_points=num_locations, dist=dist, origin=experiment_config.ORIGIN, rng=rng)
+                file_label = variables.generate_file_label(num_locations=num_locations, dist=dist, draw_num=draw_num)
+                dsl.save_dataframe(feature_dataset, target_dataset, coords=coords, origin=experiment_config.ORIGIN, file_label=file_label)
+                dataset_metadata_rows.append({"num_locations": num_locations, "dist": dist, "draw_num": draw_num, "seed": seed, "coords": coords})
+                print(f"Saved {file_label}")
+
+    dataset_metadata_df = pd.DataFrame(dataset_metadata_rows)
+    dataset_metadata_path = os.path.join(os.getcwd(), dsl.csv_folder_name, data_config.DATASET_METADATA_FILENAME)
+    dataset_metadata_df.to_csv(dataset_metadata_path, index=False)
+    print(f"Logged dataset metadata to {dataset_metadata_path}")
 
 # The data files are saved as .grib files in the folder ERA5_Data within the current working directory.
 # There is a separate file for each year for the surface data
@@ -197,42 +231,4 @@ def _build_full_feature_target_datasets(dsl, years):
 
 
 if __name__ == "__main__":
-    # For each num_locations and distance combination, draw num_draws site sets (instead of one draw per distance bound that this then subsetted when fewer locations are needed)
-    # across num_locations levels). See the independence-audit writeup for why this matters.
-
-    # Data Properties
-    YEARS = [2021, 2022, 2023, 2024]
-    PRESSURES = [925, 850, 700, 500]
-
-    # Experiment Settings
-    ORIGIN = (37.23, -80.42) # Blacksburg, VA
-    DISTS = [50, 75, 100, 125, 150]
-    NUM_LOCATIONS = [4, 7, 10] # 1 location is the control and is handled separately below
-    NUM_DRAWS = 5
-
-    dsl = DatasetLoader(load_folder="ERA5_Data", save_folder="Redo_CSV_Datasets", pressures=PRESSURES)
-    feature_dataset, target_dataset = _build_full_feature_target_datasets(dsl, YEARS)
-
-    manifest_rows = []
-
-    # The control is a single dataset containing only the origin point (no extra draws needed)
-    control_coords = dsl.draw_coords(feature_dataset, num_points=1, dist=DISTS[0], origin=ORIGIN, rng=np.random.default_rng(0))
-    dsl.save_dataframe(feature_dataset, target_dataset, coords=control_coords, origin=ORIGIN, file_label="1-sites__control")
-    manifest_rows.append({"num_locations": 1, "dist": None, "draw_id": None, "seed": None, "coords": control_coords})
-
-    for dist in DISTS:
-        for num_locations in NUM_LOCATIONS:
-            for draw_id in range(1, NUM_DRAWS + 1):
-                # draw_id is a unique seed within every combination of num_locations and dist
-                seed = dist * 10_000 + num_locations * 100 + draw_id
-                rng = np.random.default_rng(seed)
-                coords = dsl.draw_coords(feature_dataset, num_points=num_locations, dist=dist, origin=ORIGIN, rng=rng)
-                file_label = f"{num_locations}-sites__{dist}-miles__draw{draw_id}"
-                dsl.save_dataframe(feature_dataset, target_dataset, coords=coords, origin=ORIGIN, file_label=file_label)
-                manifest_rows.append({"num_locations": num_locations, "dist": dist, "draw_id": draw_id, "seed": seed, "coords": coords})
-                print(f"Saved {file_label}")
-
-    manifest_df = pd.DataFrame(manifest_rows)
-    manifest_path = os.path.join(os.getcwd(), dsl.csv_folder_name, "location_draw_manifest.csv")
-    manifest_df.to_csv(manifest_path, index=False)
-    print(f"Wrote manifest to {manifest_path}")
+    main()

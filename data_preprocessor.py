@@ -1,21 +1,12 @@
 import math
 import os
 import pandas as pd
+import variables
 
-# Paths
-CSV_FOLDER_NAME = "CSV_Datasets"
-PROCESSED_CSV_FOLDER_NAME = "Processed_Datasets"
+def main():
+    experiment_config = variables.ExperimentConfig()
+    prepare_datasets(dists=experiment_config.DISTS, nums_locations=experiment_config.NUM_LOCATIONS, nums_draws=experiment_config.NUM_DRAWS)
 
-# Data Processing Settings
-FEATURES_TO_DROP = []
-VALID_PROPORTION = 0.10 # For validation set; 10% of the data from 2021 to 2023
-BUFFER_HOURS = 72 # Trimmed off both sides of the train/test-year boundary to reduce data leakage; see data_preprocessor.py
-TEST_YEAR = 2024
-
-# Experimental Settings
-DISTS = [50, 75, 100, 125, 150]
-NUM_LOCATIONS = [4, 7, 10] # The 1-location control has no distance/draw dependence; handled separately
-NUM_DRAWS = 5 # This is the number of times to sample data points for each distance bound and number of locations
 
 class ClassificationDataPreprocessor:
     """
@@ -86,28 +77,31 @@ class ClassificationDataPreprocessor:
 
 def prepare_datasets(dists, nums_locations, nums_draws):
 
+    data_config = variables.DataConfig()
+    preprocess_config = variables.PreprocessingConfig()
+
     def get_all_file_labels():
         all_file_labels = []
-        all_file_labels.append("1-sites__control")
+        all_file_labels.append(variables.generate_file_label(num_locations=1))
         for dist in dists:
             for num_locations in nums_locations:
-                for draw_id in range(1, nums_draws + 1):
-                    all_file_labels.append(f"{num_locations}-sites__{dist}-miles__draw{draw_id}")
+                for draw_num in range(1, nums_draws + 1):
+                    all_file_labels.append(variables.generate_file_label(num_locations=num_locations, dist=dist, draw_num=draw_num))
         return all_file_labels
 
     all_file_labels = get_all_file_labels() 
     for file_label in all_file_labels:
         dp = ClassificationDataPreprocessor(
-            valid_proportion=VALID_PROPORTION,
-            buffer_hours=BUFFER_HOURS,
-            test_year=TEST_YEAR,
-            original_folder=CSV_FOLDER_NAME,
+            valid_proportion=preprocess_config.VALID_PROPORTION,
+            buffer_hours=preprocess_config.BUFFER_HOURS,
+            test_year=preprocess_config.TEST_YEAR,
+            original_folder=data_config.CSV_FOLDER_NAME,
             file_label=file_label,
-            new_folder=PROCESSED_CSV_FOLDER_NAME,
-            features_to_drop=FEATURES_TO_DROP,
+            new_folder=data_config.PROCESSED_CSV_FOLDER_NAME,
+            features_to_drop=preprocess_config.FEATURES_TO_DROP,
         )
         dp.save_datasets()
 
 
 if __name__ == "__main__":
-    prepare_datasets(dists=DISTS, nums_locations=NUM_LOCATIONS, nums_draws=NUM_DRAWS)
+    main()
