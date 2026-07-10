@@ -1,22 +1,7 @@
-# import csv
 import os
-# import random
-# import numpy as np
-# import pandas as pd
 import sys
-# import torch
-# from torch.utils.data import DataLoader
-# from torch.utils.tensorboard import SummaryWriter
-# from dataset import PrecipitationClassificationDataset, DatasetType
-# from model import Model
-# from trainer import Trainer
 from performance_log_manager import PerformanceLogManager, ExperimentType
 import variables
-
-# data_config = variables.DataConfig()
-# hyperparam_test_config = variables.HyperparameterTestingConfig()
-# fixed_hyperparam_config = variables.FixedHyperparameterConfig()
-# performance_log_manager = PerformanceLogManager(ExperimentType.hyperparameter_testing)
 
 def main():
     # Ensure the use runs this file from the right directory
@@ -30,93 +15,6 @@ def main():
         )
     
     test_hyperparams()
-
-
-# def train(lookback, num_hiddens, weight_decay, num_locations, data_file_label, run_name):
-#     random.seed(1)
-#     np.random.seed(1)
-#     torch.manual_seed(1)
-#     train_ds = PrecipitationClassificationDataset(folder=data_config.PROCESSED_CSV_FOLDER_NAME, file_label=data_file_label, lookback=lookback, dataset_type=DatasetType.train)
-#     valid_ds = PrecipitationClassificationDataset(folder=data_config.PROCESSED_CSV_FOLDER_NAME, file_label=data_file_label, lookback=lookback, dataset_type=DatasetType.validation)
-#     test_ds = PrecipitationClassificationDataset(folder=data_config.PROCESSED_CSV_FOLDER_NAME, file_label=data_file_label, lookback=lookback, dataset_type=DatasetType.test)
-#     train_dataloader = DataLoader(train_ds, batch_size=fixed_hyperparam_config.BATCH_SIZE, shuffle=True, drop_last=True)
-#     valid_dataloader = DataLoader(valid_ds, batch_size=fixed_hyperparam_config.BATCH_SIZE, shuffle=False, drop_last=True)
-#     test_dataloader = DataLoader(test_ds, batch_size=fixed_hyperparam_config.BATCH_SIZE, shuffle=False, drop_last=True)
-#     writer = SummaryWriter(log_dir=f"{hyperparam_test_config.RUNS_FOLDER}/{run_name}")
-#     model = Model(data_config.NUM_VARIABLES, num_locations, num_hiddens)
-#     loss_fn = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor([fixed_hyperparam_config.WET_DAY_LOSS_WEIGHT]))
-#     optimizer = torch.optim.SGD(model.parameters(), fixed_hyperparam_config.LEARNING_RATE, weight_decay=weight_decay)
-#     trainer = Trainer((train_dataloader, valid_dataloader, test_dataloader), model, loss_fn, optimizer, fixed_hyperparam_config.GRADIENT_CLIP, printing_metrics=False)
-
-#     model_folder_path = os.path.join(os.getcwd(), hyperparam_test_config.MODEL_SAVE_FOLDER)
-#     if not os.path.exists(model_folder_path):
-#         os.mkdir(model_folder_path)
-#     model_save_path = os.path.join(model_folder_path, f"model__{run_name}")
-
-#     best_valid_fscore = 0 # For early stopping using the validation set
-#     counter = 0 # Counts number of times valid_fscore didn't improve from last epoch
-
-#     for epoch in range(1, fixed_hyperparam_config.MAX_EPOCHS + 1):
-#         train_loss, train_accuracy, train_f1 = trainer.train_loop()
-#         valid_loss, valid_accuracy, valid_f1 = trainer.test_loop(valid=True)
-#         writer.add_scalars(main_tag="Loss", tag_scalar_dict={"Train": train_loss, "Valid": valid_loss}, global_step=epoch)
-#         writer.add_scalars(main_tag="Accuracy", tag_scalar_dict={"Train": train_accuracy, "Valid": valid_accuracy}, global_step=epoch)
-#         writer.add_scalars(main_tag="F1 Score", tag_scalar_dict={"Train": train_f1, "Valid": valid_f1}, global_step=epoch)
-#         writer.flush()
-
-#         if valid_f1 > best_valid_fscore:
-#             best_valid_fscore = valid_f1
-#             counter = 0
-#             torch.save(model.state_dict(), model_save_path) # Saves the best version; all other later saves override the previous model save
-#         else:
-#             if epoch <= fixed_hyperparam_config.MIN_EPOCHS:
-#                 continue
-#             counter += 1
-
-#         if counter >= fixed_hyperparam_config.EARLY_STOPPING_PATIENCE:
-#             print(f"[{run_name}] stopped early, on epoch {epoch} of {fixed_hyperparam_config.MAX_EPOCHS}")
-#             break
-
-#     model.load_state_dict(torch.load(model_save_path, weights_only=True)) # Load the best model
-#     _, test_accuracy, test_f1 = trainer.test_loop(valid=False)
-#     writer.add_scalars(main_tag="Accuracy", tag_scalar_dict={"Test": test_accuracy}, global_step=1)
-#     writer.add_scalars(main_tag="F1 Score", tag_scalar_dict={"Test": test_f1}, global_step=1)
-#     writer.flush()
-#     return test_f1
-
-# def _load_completed_keys():
-#     path = os.path.join(os.getcwd(), hyperparam_test_config.RESULTS_PATH)
-#     if not os.path.exists(path) or os.path.getsize(path) == 0:
-#         return {}
-#     existing = pd.read_csv(path)
-#     results_cols = hyperparam_test_config.RESULTS_COLUMNS
-#     keys = zip(*(existing[col] for col in results_cols[:-1])) # Of the form [(lookback_1, num_hiddens_1, weight_decay_1,), ...]; results cols always ends with the dependent var
-#     return dict(zip(keys, existing[results_cols[-1]])) # Of the form [(lookback_1, num_hiddens_1, weight_decay_1): f1_score_1, ...] -> keys are tuples
-
-# def _append_result(row):
-#     path = os.path.join(os.getcwd(), hyperparam_test_config.RESULTS_PATH)
-#     file_exists = os.path.exists(path)
-#     fieldnames = hyperparam_test_config.RESULTS_COLUMNS
-#     with open(path, "a", newline="", encoding="utf-8") as f:
-#         writer = csv.DictWriter(f, fieldnames=fieldnames)
-#         if not file_exists:
-#             writer.writeheader() # Header columns
-#         writer.writerow(row) # Write a new row of data
-
-# def run_and_log(lookback, num_hiddens, weight_decay, num_locations, data_file_label, run_name):
-#     key = (num_locations, lookback, num_hiddens, weight_decay) # Match the exact order and num of cols defined in variables.py 
-#     completed = _load_completed_keys() # This returns a list of all the information for prior runs (specifically, lookback, num_hiddens, weight_decay); if another run happens to match the label data, it has already been done and should be be run again; this is useful in case the code breaks in the middle, as it allows you to resume
-#     results_cols = hyperparam_test_config.RESULTS_COLUMNS
-#     if key in completed:
-#         prior_f1 = completed[key]
-#         if pd.isna(prior_f1):
-#             raise ValueError(f"{key} exists in history but has no valid F1 score! See {os.path.join(os.getcwd(), hyperparam_test_config.RESULTS_PATH)}")
-#         return prior_f1
-#     test_f1 = train(lookback=lookback, num_hiddens=num_hiddens, weight_decay=weight_decay, num_locations=num_locations, data_file_label=data_file_label, run_name=run_name)
-#     row = {"num_locations": num_locations, "lookback": lookback, "num_hiddens": num_hiddens, "weight_decay": weight_decay, "F1": test_f1}
-#     print(f"{run_name} F1: {test_f1:.4f}")
-#     _append_result(row)
-#     return test_f1
 
 def run_hyperparmeter_test(num_locations, hyperparam_test_config, performance_log_manager):
     

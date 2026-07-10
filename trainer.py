@@ -43,6 +43,7 @@ class Trainer:
     def train_loop(self):
         self.model.train()
         total_loss = 0
+        total_examples = 0
         fn_tot = 0
         fp_tot = 0
         tn_tot = 0
@@ -57,6 +58,7 @@ class Trainer:
             # Report loss before stepping; get values to determine f score
             total_loss += loss.item()
             prob_pred = torch.sigmoid(pred)
+            total_examples += prob_pred.shape[0]
             fn, fp, tn, tp = self._compute_confusion_matrix(prob_pred, y)
             fn_tot += fn
             fp_tot += fp
@@ -65,7 +67,7 @@ class Trainer:
             if batch_num % 30 == 0:
                     print(loss.item())
         avg_loss = total_loss / len(self.train_dataloader)
-        accuracy = (tn_tot + tp_tot) / (len(self.train_dataloader) * prob_pred.shape[0])
+        accuracy = (tn_tot + tp_tot) / total_examples
         f1 = compute_f1(tp_tot, fn_tot, fp_tot)
         if self.printing:
             print(f"Train Loss: {avg_loss}")
@@ -84,6 +86,7 @@ class Trainer:
             name = "Test"
         with torch.no_grad():
             total_loss = 0
+            total_examples = 0
             fn_tot = 0
             fp_tot = 0
             tn_tot = 0
@@ -93,13 +96,14 @@ class Trainer:
                 loss = self.loss_fn(pred, y)
                 total_loss += loss.item()
                 prob_pred = torch.sigmoid(pred)
+                total_examples += prob_pred.shape[0]
                 fn, fp, tn, tp = self._compute_confusion_matrix(prob_pred, y)
                 fn_tot += fn
                 fp_tot += fp
                 tn_tot += tn
                 tp_tot += tp
             avg_loss = total_loss / len(dl) # tot_loss divided by num batches
-            accuracy = (tn_tot + tp_tot) / (len(dl) * prob_pred.shape[0])
+            accuracy = (tn_tot + tp_tot) / total_examples
             f1 = compute_f1(tp_tot, fn_tot, fp_tot)
             if self.printing:
                 print(f"{name} Loss: {avg_loss}")
@@ -110,6 +114,7 @@ class Trainer:
 
     def baseline_loop(self):
         total_loss = 0
+        total_examples = 0
         fn_tot = 0
         fp_tot = 0
         tn_tot = 0
@@ -119,13 +124,14 @@ class Trainer:
             loss = self.loss_fn(pred, y)
             total_loss += loss.item()
             prob_pred = torch.sigmoid(pred)
+            total_examples += prob_pred.shape[0]
             fn, fp, tn, tp = self._compute_confusion_matrix(prob_pred, y)
             fn_tot += fn
             fp_tot += fp
             tn_tot += tn
             tp_tot += tp
         avg_loss = total_loss / len(self.test_dataloader) # tot_loss divided by num batches
-        accuracy = (tn_tot + tp_tot) / (len(self.test_dataloader) * prob_pred.shape[0])
+        accuracy = (tn_tot + tp_tot) / total_examples
         f1 = compute_f1(tp_tot, fn_tot, fp_tot)
         if self.printing:
             print(f"Basline avg loss per batch test set: {avg_loss}")
@@ -134,19 +140,21 @@ class Trainer:
         return avg_loss, accuracy, f1
 
     def random_guessing_loop(self):
+        total_examples = 0
         fn_tot = 0
         fp_tot = 0
         tn_tot = 0
         tp_tot = 0
         for batch_num, (X, y) in enumerate(self.test_dataloader):
             prob_pred = torch.rand_like(y) # Simulate random prediction between 0 and 1
+            total_examples += prob_pred.shape[0]
             fn, fp, tn, tp = self._compute_confusion_matrix(prob_pred, y)
             fn_tot += fn
             fp_tot += fp
             tn_tot += tn
             tp_tot += tp
 
-        accuracy = (tn_tot + tp_tot) / (len(self.test_dataloader) * prob_pred.shape[0])
+        accuracy = (tn_tot + tp_tot) / total_examples
         f1 = compute_f1(tp_tot, fn_tot, fp_tot)
         if self.printing:
             print(f"Random Accuracy: {accuracy * 100}%")

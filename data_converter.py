@@ -125,14 +125,17 @@ class DatasetLoader:
         origin_long = long_points[origin_long_index]
         coords = [(origin_lat, origin_long)]
 
-        num_points = min(num_points, len(lat_points) * len(long_points)) # Prevent cases where num_points > num of avaliable points in dataset
-        num_points = max(1, num_points) # Ensure num_points >= 1
-
         # Restrict the possible coordinate locations
         low_lat_bound, high_lat_bound, low_long_bound, high_long_bound = self._convert_dist_to_coords(dist=dist, origin=origin)
         lat_candidates = lat_points[(lat_points > low_lat_bound) & (lat_points < high_lat_bound)]
         long_candidates = long_points[(long_points > low_long_bound) & (long_points < high_long_bound)]
         print(f"Num lat candidates for dist {dist} = {len(lat_candidates)}; num long candidates = {len(long_candidates)}")
+
+        if num_points > len(lat_candidates) * len(long_candidates):  # Prevent cases where num_points > num of avaliable candidate points
+            print(f"There are only {len(lat_candidates) * len(long_candidates)} candidates, but user wants to draw {num_points}.")
+            num_points = len(lat_candidates) * len(long_candidates)
+            print(f"Clamping to {num_points}...")
+        num_points = max(1, num_points) # Ensure num_points >= 1
 
         i = 0
         while i < (num_points - 1): # Select num_points - 1 extra points in addition to the origin point
