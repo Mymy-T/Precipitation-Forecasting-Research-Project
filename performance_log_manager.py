@@ -6,10 +6,11 @@ import numpy as np
 import os
 import pandas as pd
 import random
+from sklearn.linear_model import LogisticRegression
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from trainer import Trainer
+from trainer import LSTMTrainer
 import variables
 
 class ExperimentType(Enum):
@@ -27,13 +28,8 @@ class PerformanceLogManager:
             self.selected_config = variables.HyperparameterTestingConfig()
         self.data_config = variables.DataConfig()
         self.fixed_hyperparam_config = variables.FixedHyperparameterConfig()
-        
-        
-
-    def train(self, lookback, num_hiddens, weight_decay, num_locations, dist, draw_num, train_seed, run_name):
-        random.seed(train_seed)
-        np.random.seed(train_seed)
-        torch.manual_seed(train_seed)
+    
+    def _prepare_dataloaders(self, lookback, num_locations, dist, draw_num):
         data_file_label = variables.generate_file_label(num_locations=num_locations, dist=dist, draw_num=draw_num) # Latter 2 params don't matter if num_locations=1
         train_ds = PrecipitationClassificationDataset(folder=self.data_config.PROCESSED_CSV_FOLDER_NAME, file_label=data_file_label, lookback=lookback, dataset_type=DatasetType.train)
         valid_ds = PrecipitationClassificationDataset(folder=self.data_config.PROCESSED_CSV_FOLDER_NAME, file_label=data_file_label, lookback=lookback, dataset_type=DatasetType.validation)
@@ -41,11 +37,48 @@ class PerformanceLogManager:
         train_dataloader = DataLoader(train_ds, batch_size=self.fixed_hyperparam_config.BATCH_SIZE, shuffle=True, drop_last=False)
         valid_dataloader = DataLoader(valid_ds, batch_size=self.fixed_hyperparam_config.BATCH_SIZE, shuffle=False, drop_last=False)
         test_dataloader = DataLoader(test_ds, batch_size=self.fixed_hyperparam_config.BATCH_SIZE, shuffle=False, drop_last=False)
+        return (train_dataloader, valid_dataloader, test_dataloader)
+
+    def _convert_dataloader_to_numpy(self, dataloader):
+        """Iterates through a DataLoader to collect and return X and y as NumPy arrays for use in training scikit-learn models."""
+        x_batches = []
+        y_batches = []
+        
+        for X, y in dataloader:
+            x_batches.append(X.cpu().detach().numpy())
+            y_batches.append(y.cpu().detach().numpy())
+            
+        # Combine all batches
+        X_all = np.concatenate(x_batches, axis=0)
+        y_all = np.concatenate(y_batches, axis=0)
+        
+        return X_all, y_all
+        
+    def train_logistic_model(self, lookback, num_locations, dist, draw_num, run_name):
+        train_dataloader, valid_dataloader, test_dataloder = self._prepare_dataloaders(lookback=lookback, num_locations=num_locations, dist=dist, draw_num=draw_num)
+        train_X, train_y = self._convert_dataloader_to_numpy(train_dataloader)
+        valid_X, valid_y = self._convert_dataloader_to_numpy(valid_dataloader)
+        test_X, test_y = self._convert_dataloader_to_numpy(test_dataloder)
+
+        model = LogisticRegression(random_state=1)
+        model.fit(train_X, train_y)
+        train_pred = model(train_X)
+        valid_pred = model(valid_X)
+        test_pred = model(test_X)
+        # TODO
+
+
+
+    def train(self, lookback, num_hiddens, weight_decay, num_locations, dist, draw_num, train_seed, run_name):
+        random.seed(train_seed)
+        np.random.seed(train_seed)
+        torch.manual_seed(train_seed)
+        dataloaders = self._prepare_dataloaders(lookback=lookback, num_locations=num_locations, dist=dist, draw_num=draw_num) # Returns tuple containing (train, valid, test) dataloaders
         writer = SummaryWriter(log_dir=f"{self.selected_config.RUNS_FOLDER}/{run_name}")
         model = Model(self.data_config.NUM_VARIABLES, num_locations, num_hiddens)
         loss_fn = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor([self.fixed_hyperparam_config.WET_DAY_LOSS_WEIGHT]))
         optimizer = torch.optim.SGD(model.parameters(), self.fixed_hyperparam_config.LEARNING_RATE, weight_decay=weight_decay)
-        trainer = Trainer((train_dataloader, valid_dataloader, test_dataloader), model, loss_fn, optimizer, self.fixed_hyperparam_config.GRADIENT_CLIP, printing_metrics=False)
+        trainer = LSTMTrainer(dataloaders, model, loss_fn, optimizer, self.fixed_hyperparam_config.GRADIENT_CLIP, printing_metrics=False)
 
         model_folder_path = os.path.join(os.getcwd(), self.selected_config.MODEL_SAVE_FOLDER)
         if not os.path.exists(model_folder_path):

@@ -6,7 +6,7 @@ def compute_f1(tp, fn, fp):
         return 0.0
     return 2 * tp / denom
 
-class Trainer:
+class LSTMTrainer:
     def __init__(self, dataloaders, model, loss_fn, optimizer, grad_clip, printing_metrics):
         self.train_dataloader, self.valid_dataloader, self.test_dataloader = dataloaders
         self.model = model
