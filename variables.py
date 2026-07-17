@@ -52,6 +52,9 @@ class MainConfig:
     NUM_HIDDENS: int = 64
     WEIGHT_DECAY: float = 0
 
+    # For baseline model
+    BASELINE_RESULTS_PATH: str = "baseline_results.csv" # results cols are the same as for lstm models; baseline models aren't saved
+
 
 @dataclass(frozen=True)
 class FixedHyperparameterConfig:

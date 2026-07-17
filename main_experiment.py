@@ -29,6 +29,8 @@ def run_all_combinations():
     control_file_label = variables.generate_file_label(num_locations=1)
     for train_seed in experiment_config.TRAINING_SEEDS: # Run for control (n_locations = 1)
         performance_log_manager.run_and_log(lookback=lookback, num_hiddens=num_hiddens, weight_decay=weight_decay, num_locations=1, dist=0, draw_num=1, train_seed=train_seed, run_name=f"{control_file_label}__seed{train_seed}")
+    baseline_control_file_label = control_file_label + "__baseline"
+    performance_log_manager.run_and_log(lookback=lookback, num_hiddens=num_hiddens, weight_decay=weight_decay, num_locations=1, dist=0, draw_num=1, train_seed=1, run_name=f"{baseline_control_file_label}__seed1", baseline=True)
 
     for dist in experiment_config.DISTS: # Run for all other combinations
         for num_locations in experiment_config.NUM_LOCATIONS:
@@ -37,6 +39,8 @@ def run_all_combinations():
                 for train_seed in experiment_config.TRAINING_SEEDS:
                     run_name = f"{file_label}__seed{train_seed}"
                     performance_log_manager.run_and_log(lookback, num_hiddens, weight_decay, num_locations, dist, draw_num, train_seed, run_name)
+                baseline_file_label = file_label + "__baseline"
+                performance_log_manager.run_and_log(lookback=lookback, num_hiddens=num_hiddens, weight_decay=weight_decay, num_locations=num_locations, dist=dist, draw_num=draw_num, train_seed=1, run_name=f"{baseline_file_label}__seed1", baseline=True)
 
 if __name__ == "__main__":
     main()

@@ -60,8 +60,8 @@ class PrecipitationClassificationDataset(torch.utils.data.Dataset):
             if timestep not in invalid_timesteps:
                 feature_slice = df_slice.iloc[:lookback, :-1] # Exclude last column, which is the target
                 target_slice = df_slice.iloc[lookback-1:, -1] # Only include last (target) column
-                feature_tensor = torch.tensor(feature_slice.values.tolist())
-                target_tensor = torch.tensor(target_slice.values.tolist())
+                feature_tensor = torch.tensor(feature_slice.values.tolist()) # Shape is (lookback, num_feature_cols); if batched there will be an extra first dimension
+                target_tensor = torch.tensor(target_slice.values.tolist()) # Shape is (num_forecast_steps); if batched there will be an extra first dimension
                 dataset.append((timestep, feature_tensor, target_tensor))
             i += 1
                 

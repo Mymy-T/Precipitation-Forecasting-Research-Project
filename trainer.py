@@ -6,6 +6,29 @@ def compute_f1(tp, fn, fp):
         return 0.0
     return 2 * tp / denom
 
+def compute_confusion_matrix(prob_pred, target):
+    # Only allows for one timestep ahead forecasting right now
+    false_negatives = 0
+    false_positives = 0
+    true_negatives = 0
+    true_positives = 0
+    for i in range(prob_pred.shape[0]):
+        if prob_pred[i] >= 0.5:
+            pred_class = 1
+        else:
+            pred_class = 0
+
+        if (pred_class == 0) and (target[i] == 1):
+            false_negatives += 1
+        elif (pred_class == 1) and (target[i] == 0):
+            false_positives += 1
+        elif (pred_class == 0) and (target[i] == 0):
+            true_negatives += 1
+        elif (pred_class == 1) and (target[i] == 1):
+            true_positives += 1
+
+    return false_negatives, false_positives, true_negatives, true_positives
+
 class LSTMTrainer:
     def __init__(self, dataloaders, model, loss_fn, optimizer, grad_clip, printing_metrics):
         self.train_dataloader, self.valid_dataloader, self.test_dataloader = dataloaders
@@ -14,30 +37,6 @@ class LSTMTrainer:
         self.optimizer = optimizer
         self.grad_clip = grad_clip
         self.printing = printing_metrics
-
-    def _compute_confusion_matrix(self, prob_pred, target):
-        false_negatives = 0
-        false_positives = 0
-        true_negatives = 0
-        true_positives = 0
-        for i in range(prob_pred.shape[0]):
-            if prob_pred[i] >= 0.5:
-                pred_class = 1
-            else:
-                pred_class = 0
-
-            if (pred_class == 0) and (target[i] == 1):
-                false_negatives += 1
-            elif (pred_class == 1) and (target[i] == 0):
-                false_positives += 1
-            elif (pred_class == 0) and (target[i] == 0):
-                true_negatives += 1
-            elif (pred_class == 1) and (target[i] == 1):
-                true_positives += 1
-
-        return false_negatives, false_positives, true_negatives, true_positives
-
-
 
 
     def train_loop(self):
@@ -59,7 +58,7 @@ class LSTMTrainer:
             total_loss += loss.item()
             prob_pred = torch.sigmoid(pred)
             total_examples += prob_pred.shape[0]
-            fn, fp, tn, tp = self._compute_confusion_matrix(prob_pred, y)
+            fn, fp, tn, tp = compute_confusion_matrix(prob_pred, y)
             fn_tot += fn
             fp_tot += fp
             tn_tot += tn
@@ -97,7 +96,7 @@ class LSTMTrainer:
                 total_loss += loss.item()
                 prob_pred = torch.sigmoid(pred)
                 total_examples += prob_pred.shape[0]
-                fn, fp, tn, tp = self._compute_confusion_matrix(prob_pred, y)
+                fn, fp, tn, tp = compute_confusion_matrix(prob_pred, y)
                 fn_tot += fn
                 fp_tot += fp
                 tn_tot += tn
@@ -125,7 +124,7 @@ class LSTMTrainer:
             total_loss += loss.item()
             prob_pred = torch.sigmoid(pred)
             total_examples += prob_pred.shape[0]
-            fn, fp, tn, tp = self._compute_confusion_matrix(prob_pred, y)
+            fn, fp, tn, tp = compute_confusion_matrix(prob_pred, y)
             fn_tot += fn
             fp_tot += fp
             tn_tot += tn
@@ -148,7 +147,7 @@ class LSTMTrainer:
         for batch_num, (X, y) in enumerate(self.test_dataloader):
             prob_pred = torch.rand_like(y) # Simulate random prediction between 0 and 1
             total_examples += prob_pred.shape[0]
-            fn, fp, tn, tp = self._compute_confusion_matrix(prob_pred, y)
+            fn, fp, tn, tp = compute_confusion_matrix(prob_pred, y)
             fn_tot += fn
             fp_tot += fp
             tn_tot += tn
