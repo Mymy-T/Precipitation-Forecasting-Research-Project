@@ -39,9 +39,11 @@ class HyperparameterTestingConfig:
     RESULTS_COLUMNS: list[str] = field(default_factory=lambda: ["num_locations", "lookback", "num_hiddens", "weight_decay", "valid_F1", "F1"]) # Output file columns; can be renamed, not reordered or reshaped
 
     # These 3 are the possible hyperparams for testing; unique to HyperparameterTestingConfig
-    LOOKBACKS: list[int] = field(default_factory=lambda: [5, 12, 24]) # Test all lookbacks with num_hiddens default = 64 and weight_decay default = 0 first; select best
-    NUM_HIDDENS_OPTIONS: list[int] = field(default_factory=lambda: [32, 64, 128, 256]) # Then test varying numbers of num_hiddens on the best lookback, with weight_decay = 0; select best
-    WEIGHT_DECAY_OPTIONS: list[float] = field(default_factory=lambda: [0, 1e-4, 1e-3]) # Finally, select best weight_decay for the best lookback and num_hiddens
+    LOOKBACKS: list[int] = field(default_factory=lambda: [5, 10, 15, 20, 25]) # Test all lookbacks with DEFAULT_NUM_HIDDENS and DEFAULT_WEIGHT_DECAY first; select best
+    NUM_HIDDENS_OPTIONS: list[int] = field(default_factory=lambda: [32, 64, 128, 256]) # Then test varying numbers of num_hiddens on the best lookback, with DEFAULT_WEIGHT_DECAY; select best
+    WEIGHT_DECAY_OPTIONS: list[float] = field(default_factory=lambda: [0, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1]) # Finally, select best weight_decay for the best lookback and num_hiddens
+    DEFAULT_NUM_HIDDENS: int = 64 # Moderate capacity
+    DEFAULT_WEIGHT_DECAY: float = 1e-4 # Moderate regularization to prevent overfitting
 
 @dataclass(frozen=True)
 class MainConfig:
@@ -52,9 +54,9 @@ class MainConfig:
     RESULTS_COLUMNS: list[str] = field(default_factory=lambda: ["num_locations", "dist", "draw_num", "seed", "F1"]) # Output file columns; can be renamed, but not reordered or reshaped
 
     # These 3 are changed with hyperparameter selection; unique to MainConfig
-    LOOKBACK: int = 5 # LOOKBACK - 1 hours before, since data for current timestep is included
+    LOOKBACK: int = 15 # LOOKBACK - 1 hours before, since data for current timestep is included
     NUM_HIDDENS: int = 64
-    WEIGHT_DECAY: float = 0
+    WEIGHT_DECAY: float = 1e-4
 
     # For baseline model
     BASELINE_RESULTS_PATH: str = "baseline_results.csv" # results cols are the same as for lstm models; baseline models aren't saved
