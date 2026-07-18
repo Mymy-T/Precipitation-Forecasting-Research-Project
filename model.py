@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import variables
 
 
 class Model(nn.Module):
@@ -14,8 +15,8 @@ class Model(nn.Module):
 
     def forward(self, x):
         batch_size = x.size(0)
-        h0 = torch.zeros((1, batch_size, self.num_hiddens)) # 1 bc 1 layer LSTM
-        c0 = torch.zeros((1, batch_size, self.num_hiddens)) # 1 bc 1 layer LSTM
+        h0 = torch.zeros((1, batch_size, self.num_hiddens)).to(variables.DEVICE) # 1 bc 1 layer LSTM
+        c0 = torch.zeros((1, batch_size, self.num_hiddens)).to(variables.DEVICE) # 1 bc 1 layer LSTM
         lstm_output, (h_n, c_n) = self.lstm(x, (h0, c0))
         # Since num_layers = 1, lstm_output shape is (batch_size, lookback, num_hiddens)
         output = self.feedforward(lstm_output[:, -1, :])

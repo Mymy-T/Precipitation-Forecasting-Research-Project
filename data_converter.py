@@ -199,7 +199,7 @@ class DatasetLoader:
         target_df = target_df.shift(-1)
         # Match rows to the rows of feature_df (accumulated vars contain extra rows at the beginning and end)
         start = feature_df.index[0]
-        end = feature_df_subset.index[-1]
+        end = feature_df.index[-1]
         target_df = target_df[start:end]
         df = pd.concat([feature_df, target_df], axis=1)
         df.dropna(inplace=True)

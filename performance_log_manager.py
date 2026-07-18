@@ -34,9 +34,11 @@ class PerformanceLogManager:
         train_ds = PrecipitationClassificationDataset(folder=self.data_config.PROCESSED_CSV_FOLDER_NAME, file_label=data_file_label, lookback=lookback, dataset_type=DatasetType.train)
         valid_ds = PrecipitationClassificationDataset(folder=self.data_config.PROCESSED_CSV_FOLDER_NAME, file_label=data_file_label, lookback=lookback, dataset_type=DatasetType.validation)
         test_ds = PrecipitationClassificationDataset(folder=self.data_config.PROCESSED_CSV_FOLDER_NAME, file_label=data_file_label, lookback=lookback, dataset_type=DatasetType.test)
-        train_dataloader = DataLoader(train_ds, batch_size=self.fixed_hyperparam_config.BATCH_SIZE, shuffle=True, drop_last=False)
-        valid_dataloader = DataLoader(valid_ds, batch_size=self.fixed_hyperparam_config.BATCH_SIZE, shuffle=False, drop_last=False)
-        test_dataloader = DataLoader(test_ds, batch_size=self.fixed_hyperparam_config.BATCH_SIZE, shuffle=False, drop_last=False)
+
+        running_on_cpu = (variables.DEVICE.type == "cpu")
+        train_dataloader = DataLoader(train_ds, batch_size=self.fixed_hyperparam_config.BATCH_SIZE, shuffle=True, drop_last=False, pin_memory=(not running_on_cpu))
+        valid_dataloader = DataLoader(valid_ds, batch_size=self.fixed_hyperparam_config.BATCH_SIZE, shuffle=False, drop_last=False, pin_memory=(not running_on_cpu))
+        test_dataloader = DataLoader(test_ds, batch_size=self.fixed_hyperparam_config.BATCH_SIZE, shuffle=False, drop_last=False, pin_memory=(not running_on_cpu))
         return (train_dataloader, valid_dataloader, test_dataloader)
 
     def _convert_dataloader_to_numpy(self, dataloader):
@@ -79,6 +81,7 @@ class PerformanceLogManager:
         # valid_acc, valid_f1 = self._compute_logistic_model_metrics(valid_preds, valid_y)
         test_acc, test_f1 = self._compute_logistic_model_metrics(test_preds, test_y)
         valid_acc, valid_f1 = self._compute_logistic_model_metrics(valid_preds,valid_y)
+        print(f"{run_name} completed with test accuracy of {test_acc:.4f} and test f1 of {test_f1:.4f}")
         return test_f1, valid_f1
 
 
@@ -88,8 +91,8 @@ class PerformanceLogManager:
         torch.manual_seed(train_seed)
         dataloaders = self._prepare_dataloaders(lookback=lookback, num_locations=num_locations, dist=dist, draw_num=draw_num) # Returns tuple containing (train, valid, test) dataloaders
         writer = SummaryWriter(log_dir=f"{self.selected_config.RUNS_FOLDER}/{run_name}")
-        model = Model(self.data_config.NUM_VARIABLES, num_locations, num_hiddens)
-        loss_fn = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor([self.fixed_hyperparam_config.WET_DAY_LOSS_WEIGHT]))
+        model = Model(self.data_config.NUM_VARIABLES, num_locations, num_hiddens).to(variables.DEVICE)
+        loss_fn = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor([self.fixed_hyperparam_config.WET_DAY_LOSS_WEIGHT]).to(variables.DEVICE))
         optimizer = torch.optim.SGD(model.parameters(), self.fixed_hyperparam_config.LEARNING_RATE, weight_decay=weight_decay)
         trainer = LSTMTrainer(dataloaders, model, loss_fn, optimizer, self.fixed_hyperparam_config.GRADIENT_CLIP, printing_metrics=False)
 
@@ -122,7 +125,7 @@ class PerformanceLogManager:
                 print(f"[{run_name}] stopped early, on epoch {epoch} of {self.fixed_hyperparam_config.MAX_EPOCHS}")
                 break
 
-        model.load_state_dict(torch.load(model_save_path, weights_only=True)) # Load the best model
+        model.load_state_dict(torch.load(model_save_path, weights_only=True, map_location=variables.DEVICE)) # Load the best model
         _, test_accuracy, test_f1 = trainer.test_loop(valid=False)
         writer.add_scalars(main_tag="Accuracy", tag_scalar_dict={"Test": test_accuracy}, global_step=1)
         writer.add_scalars(main_tag="F1 Score", tag_scalar_dict={"Test": test_f1}, global_step=1)

@@ -14,7 +14,7 @@ class ClassificationDataPreprocessor:
     chronological train / valid / test split:
       - test = the full held-out calendar year (test_year, e.g. 2024); whole year used to improve assessment of generalization
       - train / valid = the remaining years, split chronologically by valid_proportion.
-      - buffer_hours rows are trimmed off both sides of the train-vs-test boundary due to potential similarlity between the tail of the validation dataset and the head of the test dataset -> reduce data leakage
+      - buffer_hours rows are trimmed off both sides of the trainval/test boundary and the train/val boundary due to potential similarlity between the tail of the validation dataset and the head of the test dataset -> reduce data leakage
     """
     def __init__(self, valid_proportion: float, buffer_hours: int, test_year: int, original_folder: str, file_label: str, new_folder: str, features_to_drop):
         path = os.path.join(os.getcwd(), original_folder, f"{file_label}.csv")
@@ -37,8 +37,11 @@ class ClassificationDataPreprocessor:
             test_df = test_df.iloc[buffer_hours:]
 
         valid_split_index = math.floor((1 - valid_proportion) * len(trainval_df.index))
-        train_df = trainval_df.iloc[:valid_split_index, :].copy()
-        valid_df = trainval_df.iloc[valid_split_index:, :].copy()
+        if valid_split_index <= buffer_hours or len(trainval_df) - valid_split_index <= buffer_hours:
+            print(f"buffer_hours = {buffer_hours}; it is larger than either the train set or the valid set. Please ensure buffer_hours is smaller than the sizes of both.")
+            raise IndexError
+        train_df = trainval_df.iloc[:valid_split_index-buffer_hours, :].copy()
+        valid_df = trainval_df.iloc[valid_split_index+buffer_hours:, :].copy()
         test_df = test_df.copy()
 
         # These store the means and stdevs for each column in train_df; used to standardize the data

@@ -1,4 +1,5 @@
 import torch
+import variables
 
 def compute_f1(tp, fn, fp):
     denom = 2 * tp + fn + fp
@@ -48,6 +49,8 @@ class LSTMTrainer:
         tn_tot = 0
         tp_tot = 0
         for batch_num, (X, y) in enumerate(self.train_dataloader):
+            X = X.to(variables.DEVICE)
+            y = y.to(variables.DEVICE)
             pred = self.model(X)
             loss = self.loss_fn(pred, y)
             self.optimizer.zero_grad()
@@ -91,6 +94,8 @@ class LSTMTrainer:
             tn_tot = 0
             tp_tot = 0
             for batch_num, (X, y) in enumerate(dl):
+                X = X.to(variables.DEVICE)
+                y = y.to(variables.DEVICE)
                 pred = self.model(X)
                 loss = self.loss_fn(pred, y)
                 total_loss += loss.item()
