@@ -124,6 +124,8 @@ class LSTMTrainer:
         tn_tot = 0
         tp_tot = 0
         for batch_num, (X, y) in enumerate(self.test_dataloader):
+            X = X.to(variables.DEVICE)
+            y = y.to(variables.DEVICE)
             pred = torch.ones_like(y) * -10 # Simulate predicting 0 for all samples
             loss = self.loss_fn(pred, y)
             total_loss += loss.item()
@@ -150,6 +152,8 @@ class LSTMTrainer:
         tn_tot = 0
         tp_tot = 0
         for batch_num, (X, y) in enumerate(self.test_dataloader):
+            X = X.to(variables.DEVICE)
+            y = y.to(variables.DEVICE)
             prob_pred = torch.rand_like(y) # Simulate random prediction between 0 and 1
             total_examples += prob_pred.shape[0]
             fn, fp, tn, tp = compute_confusion_matrix(prob_pred, y)

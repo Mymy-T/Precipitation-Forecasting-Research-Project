@@ -134,18 +134,22 @@ class PerformanceLogManager:
         return test_f1, best_valid_fscore # best_valid_fscore is for best checkpoint; used for hyperparam testing
 
     def _load_completed_keys(self, baseline=False):
-        path = os.path.join(os.getcwd(), self.selected_config.RESULTS_PATH if not baseline else variables.MainConfig.BASELINE_RESULTS_PATH)
+        path = os.path.join(os.getcwd(), self.selected_config.RESULTS_PATH if not baseline else variables.MainConfig().BASELINE_RESULTS_PATH)
         if not os.path.exists(path) or os.path.getsize(path) == 0:
             return {}
         existing = pd.read_csv(path)
-        results_cols = self.selected_config.RESULTS_COLUMNS if not baseline else variables.MainConfig.RESULTS_COLUMNS
-        key_cols = results_cols[:4] # First 4 columns are always the key (e.g. num_locations, lookback, num_hiddens, weight_decay)
-        value_cols = results_cols[4:] # Remaining columns are the logged metric(s); 1 for main (F1), 2 for hyperparameter testing (valid_F1, F1)
-        keys = zip(*(existing[col] for col in key_cols))
-        if len(value_cols) == 1:
-            values = existing[value_cols[0]]
+        results_cols = self.selected_config.RESULTS_COLUMNS if not baseline else variables.MainConfig().RESULTS_COLUMNS
+        if results_cols == variables.MainConfig().RESULTS_COLUMNS:
+            key_cols = results_cols[:4] # num_locations, dist, draw_num, seed
+            value_cols = results_cols[4:] # F1
         else:
-            values = zip(*(existing[col] for col in value_cols))
+            key_cols = results_cols[:5] # num_locations, dist, lookback, num_hiddens, weight_decay
+            value_cols = results_cols[5:] # valid_F1, F1
+        keys = zip(*(existing[col] for col in key_cols)) # [(first_key_0, second_key_0, third_key_0, ...), (first_key_1, second_key_1, third_key_1, ...), ...]
+        if len(value_cols) == 1:
+            values = existing[value_cols[0]] # [f1_0, f1_1, ...]
+        else:
+            values = zip(*(existing[col] for col in value_cols)) # [(valid_f1_0, f1_0), (valid_f1_1, f1_1), ...]
         return dict(zip(keys, values)) # Of the form {key_tuple: value_or_tuple_of_values, ...}
 
     def _append_result(self, row, baseline=False):
@@ -163,20 +167,20 @@ class PerformanceLogManager:
         if self.experiment_type == ExperimentType.main:
             key = (num_locations, dist, draw_num, train_seed)
         else:
-            key = (num_locations, lookback, num_hiddens, weight_decay)
-        completed = self._load_completed_keys(baseline) # This returns a list of all the information for prior runs (specifically, lookback, num_hiddens, weight_decay); if another run happens to match the label data, it has already been done and should be be run again; this is useful in case the code breaks in the middle, as it allows you to resume
+            key = (num_locations, dist, lookback, num_hiddens, weight_decay)
+        completed = self._load_completed_keys(baseline) # This returns a list of all the information for prior runs; if another run happens to match the label data, it has already been done and should not be run again
         results_cols = self.selected_config.RESULTS_COLUMNS if not baseline else variables.MainConfig().RESULTS_COLUMNS
         if key in completed:
-            prior = completed[key]
+            prior_data = completed[key]
             if self.experiment_type == ExperimentType.hyperparameter_testing:
-                prior_valid_f1, prior_test_f1 = prior
+                prior_valid_f1, prior_test_f1 = prior_data
                 if pd.isna(prior_valid_f1) or pd.isna(prior_test_f1):
-                    raise ValueError(f"{key} exists in history but has no valid F1 score! See {os.path.join(os.getcwd(), self.selected_config.RESULTS_PATH)}")
+                    raise ValueError(f"{key} exists in history but has empty valid_F1 or F1 field! See {os.path.join(os.getcwd(), self.selected_config.RESULTS_PATH)}")
                 return prior_test_f1, prior_valid_f1
             else:
-                if pd.isna(prior):
-                    raise ValueError(f"{key} exists in history but has no valid F1 score! See {os.path.join(os.getcwd(), self.selected_config.RESULTS_PATH)}")
-                return prior, None
+                if pd.isna(prior_data):
+                    raise ValueError(f"{key} exists in history but has empty F1 field! See {os.path.join(os.getcwd(), self.selected_config.RESULTS_PATH)}")
+                return prior_data, None
         if not baseline:
             test_f1, valid_f1 = self.train(lookback=lookback, num_hiddens=num_hiddens, weight_decay=weight_decay, num_locations=num_locations, dist=dist, draw_num=draw_num, train_seed=train_seed, run_name=run_name)
         else:
@@ -184,7 +188,7 @@ class PerformanceLogManager:
         if self.experiment_type == ExperimentType.main:
             row = {results_cols[0]: num_locations, results_cols[1]: dist, results_cols[2]: draw_num, results_cols[3]: train_seed, results_cols[4]: test_f1}
         else:
-            row = {results_cols[0]: num_locations, results_cols[1]: lookback, results_cols[2]: num_hiddens, results_cols[3]: weight_decay, results_cols[4]: valid_f1, results_cols[5]: test_f1}
+            row = {results_cols[0]: num_locations, results_cols[1]: dist, results_cols[2]: lookback, results_cols[3]: num_hiddens, results_cols[4]: weight_decay, results_cols[5]: valid_f1, results_cols[6]: test_f1}
         print(f"{run_name} F1: {test_f1:.4f}")
         self._append_result(row, baseline)
         return test_f1, valid_f1

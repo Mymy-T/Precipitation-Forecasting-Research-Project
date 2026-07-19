@@ -36,7 +36,7 @@ class HyperparameterTestingConfig:
     MODEL_SAVE_FOLDER: str = "Hyperparameter_Testing_Models"
     RUNS_FOLDER: str = "Hyperparameter_Testing_Runs"
     RESULTS_PATH: str = "hyperparameter_testing_results.csv"
-    RESULTS_COLUMNS: list[str] = field(default_factory=lambda: ["num_locations", "lookback", "num_hiddens", "weight_decay", "valid_F1", "F1"]) # Output file columns; can be renamed, not reordered or reshaped
+    RESULTS_COLUMNS: list[str] = field(default_factory=lambda: ["num_locations", "dist", "lookback", "num_hiddens", "weight_decay", "valid_F1", "F1"]) # Output file columns; can be renamed, not reordered or reshaped
 
     # These 3 are the possible hyperparams for testing; unique to HyperparameterTestingConfig
     LOOKBACKS: list[int] = field(default_factory=lambda: [5, 10, 15, 20, 25]) # Test all lookbacks with DEFAULT_NUM_HIDDENS and DEFAULT_WEIGHT_DECAY first; select best
