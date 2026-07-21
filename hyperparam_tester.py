@@ -22,7 +22,7 @@ def run_hyperparmeter_test(nums_locations, dists, hyperparam_test_config, perfor
     draw_num = 1
     train_seed = 1
     control_dist = 50 # control_dist also doesn't matter
-    control_run_name_prefix = f"hparam_tune__1_sites"
+    control_run_name_prefix = "hparam_tune__1_sites"
 
     # Tune the lookback
     lookback_results = {}
