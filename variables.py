@@ -10,7 +10,7 @@ class DataConfig:
     DATASET_METADATA_FILENAME: str = "metadata.csv"
     CSV_FOLDER_NAME: str = "CSV_Datasets"
     PROCESSED_CSV_FOLDER_NAME: str = "Processed_Datasets"
-    NUM_VARIABLES: int = 13
+    NUM_VARIABLES: int = 15
     YEARS: list[int] = field(default_factory=lambda: [2021, 2022, 2023, 2024])
     PRESSURES: list[int] = field(default_factory=lambda: [925, 850, 700, 500])
     
