@@ -10,7 +10,7 @@ from sklearn.linear_model import LogisticRegression
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from trainer import LSTMTrainer, compute_confusion_matrix, compute_f1
+from trainer import LSTMTrainer, compute_confusion_matrix, compute_f1, compute_precision_recall
 import variables
 
 class ExperimentType(Enum):
@@ -64,8 +64,9 @@ class PerformanceLogManager:
         fn, fp, tn, tp = compute_confusion_matrix(preds.squeeze(), labels)
         acc = (tp + tn) / labels.shape[0]
         f1 = compute_f1(tp, fn, fp)
-        return acc, f1
-        
+        precision, recall = compute_precision_recall(tp, fn, fp)
+        return acc, f1, tp, fp, tn, fn, precision, recall
+
     def train_logistic_model(self, lookback, num_locations, dist, draw_num, run_name):
         train_dataloader, valid_dataloader, test_dataloder = self._prepare_dataloaders(lookback=lookback, num_locations=num_locations, dist=dist, draw_num=draw_num)
         train_X, train_y = self._convert_dataloader_to_numpy(train_dataloader)
@@ -78,11 +79,10 @@ class PerformanceLogManager:
         valid_preds = model.predict(valid_X)
         test_preds = model.predict(test_X)
         # train_acc, train_f1 = self._compute_logistic_model_metrics(train_preds, train_y)
-        # valid_acc, valid_f1 = self._compute_logistic_model_metrics(valid_preds, valid_y)
-        test_acc, test_f1 = self._compute_logistic_model_metrics(test_preds, test_y)
-        valid_acc, valid_f1 = self._compute_logistic_model_metrics(valid_preds,valid_y)
+        test_acc, test_f1, test_tp, test_fp, test_tn, test_fn, test_precision, test_recall = self._compute_logistic_model_metrics(test_preds, test_y)
+        valid_acc, valid_f1, *_ = self._compute_logistic_model_metrics(valid_preds, valid_y)
         print(f"{run_name} completed with test accuracy of {test_acc:.4f} and test f1 of {test_f1:.4f}")
-        return test_f1, valid_f1
+        return test_f1, valid_f1, test_tp, test_fp, test_tn, test_fn, test_precision, test_recall
 
 
     def train(self, lookback, num_hiddens, weight_decay, num_locations, dist, draw_num, train_seed, run_name):
@@ -106,7 +106,7 @@ class PerformanceLogManager:
 
         for epoch in range(1, self.fixed_hyperparam_config.MAX_EPOCHS + 1):
             train_loss, train_accuracy, train_f1 = trainer.train_loop()
-            valid_loss, valid_accuracy, valid_f1 = trainer.test_loop(valid=True)
+            valid_loss, valid_accuracy, valid_f1, *_ = trainer.test_loop(valid=True)
             writer.add_scalars(main_tag="Loss", tag_scalar_dict={"Train": train_loss, "Valid": valid_loss}, global_step=epoch)
             writer.add_scalars(main_tag="Accuracy", tag_scalar_dict={"Train": train_accuracy, "Valid": valid_accuracy}, global_step=epoch)
             writer.add_scalars(main_tag="F1 Score", tag_scalar_dict={"Train": train_f1, "Valid": valid_f1}, global_step=epoch)
@@ -126,12 +126,13 @@ class PerformanceLogManager:
                 break
 
         model.load_state_dict(torch.load(model_save_path, weights_only=True, map_location=variables.DEVICE)) # Load the best model
-        _, test_accuracy, test_f1 = trainer.test_loop(valid=False)
+        _, test_accuracy, test_f1, test_tp, test_fp, test_tn, test_fn = trainer.test_loop(valid=False)
+        precision, recall = compute_precision_recall(test_tp, test_fn, test_fp)
         writer.add_scalars(main_tag="Accuracy", tag_scalar_dict={"Test": test_accuracy}, global_step=1)
         writer.add_scalars(main_tag="F1 Score", tag_scalar_dict={"Test": test_f1}, global_step=1)
         writer.flush()
         writer.close()
-        return test_f1, best_valid_fscore # best_valid_fscore is for best checkpoint; used for hyperparam testing
+        return test_f1, best_valid_fscore, test_tp, test_fp, test_tn, test_fn, precision, recall # best_valid_fscore is for best checkpoint; used for hyperparam testing
 
     def _load_completed_keys(self, baseline=False):
         path = os.path.join(os.getcwd(), self.selected_config.RESULTS_PATH if not baseline else variables.MainConfig().BASELINE_RESULTS_PATH)
@@ -178,15 +179,17 @@ class PerformanceLogManager:
                     raise ValueError(f"{key} exists in history but has empty valid_F1 or F1 field! See {os.path.join(os.getcwd(), self.selected_config.RESULTS_PATH)}")
                 return prior_test_f1, prior_valid_f1
             else:
-                if pd.isna(prior_data):
-                    raise ValueError(f"{key} exists in history but has empty F1 field! See {os.path.join(os.getcwd(), self.selected_config.RESULTS_PATH)}")
-                return prior_data, None
+                if any(pd.isna(v) for v in prior_data):
+                    raise ValueError(f"{key} exists in history but has an empty field! See {os.path.join(os.getcwd(), self.selected_config.RESULTS_PATH)}")
+                return prior_data[0], None # prior_data[0] is F1
         if not baseline:
-            test_f1, valid_f1 = self.train(lookback=lookback, num_hiddens=num_hiddens, weight_decay=weight_decay, num_locations=num_locations, dist=dist, draw_num=draw_num, train_seed=train_seed, run_name=run_name)
+            test_f1, valid_f1, test_tp, test_fp, test_tn, test_fn, precision, recall = self.train(lookback=lookback, num_hiddens=num_hiddens, weight_decay=weight_decay, num_locations=num_locations, dist=dist, draw_num=draw_num, train_seed=train_seed, run_name=run_name)
         else:
-            test_f1, valid_f1 = self.train_logistic_model(lookback=lookback, num_locations=num_locations, dist=dist, draw_num=draw_num, run_name=run_name)
+            test_f1, valid_f1, test_tp, test_fp, test_tn, test_fn, precision, recall = self.train_logistic_model(lookback=lookback, num_locations=num_locations, dist=dist, draw_num=draw_num, run_name=run_name)
         if self.experiment_type == ExperimentType.main:
-            row = {results_cols[0]: num_locations, results_cols[1]: dist, results_cols[2]: draw_num, results_cols[3]: train_seed, results_cols[4]: test_f1}
+            row = {results_cols[0]: num_locations, results_cols[1]: dist, results_cols[2]: draw_num, results_cols[3]: train_seed,
+                   results_cols[4]: test_f1, results_cols[5]: test_tp, results_cols[6]: test_fp, results_cols[7]: test_tn,
+                   results_cols[8]: test_fn, results_cols[9]: precision, results_cols[10]: recall}
         else:
             row = {results_cols[0]: num_locations, results_cols[1]: dist, results_cols[2]: lookback, results_cols[3]: num_hiddens, results_cols[4]: weight_decay, results_cols[5]: valid_f1, results_cols[6]: test_f1}
         print(f"{run_name} F1: {test_f1:.4f}")

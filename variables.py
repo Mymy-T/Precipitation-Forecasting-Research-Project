@@ -51,7 +51,7 @@ class MainConfig:
     MODEL_SAVE_FOLDER: str = "Models"
     RUNS_FOLDER: str = "Runs"
     RESULTS_PATH: str = "results.csv"
-    RESULTS_COLUMNS: list[str] = field(default_factory=lambda: ["num_locations", "dist", "draw_num", "seed", "F1"]) # Output file columns; can be renamed, but not reordered or reshaped
+    RESULTS_COLUMNS: list[str] = field(default_factory=lambda: ["num_locations", "dist", "draw_num", "seed", "F1", "TP", "FP", "TN", "FN", "precision", "recall"]) # Output file columns; can be renamed, but not reordered or reshaped
 
     # These 3 are changed with hyperparameter selection; unique to MainConfig
     LOOKBACK: int = 5 # LOOKBACK - 1 hours before, since data for current timestep is included

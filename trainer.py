@@ -7,6 +7,11 @@ def compute_f1(tp, fn, fp):
         return 0.0
     return 2 * tp / denom
 
+def compute_precision_recall(tp, fn, fp):
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    return precision, recall
+
 def compute_confusion_matrix(prob_pred, target):
     # Only allows for one timestep ahead forecasting right now
     false_negatives = 0
@@ -113,7 +118,7 @@ class LSTMTrainer:
                 print(f"{name} Loss: {avg_loss}")
                 print(f"{name} Accuracy: {accuracy * 100}%")
                 print(f"{name} f1: {f1}")
-            return avg_loss, accuracy, f1
+            return avg_loss, accuracy, f1, tp_tot, fp_tot, tn_tot, fn_tot
 
 
     def baseline_loop(self):
