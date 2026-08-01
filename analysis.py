@@ -4,7 +4,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scikit_posthocs as sp
-from scipy.stats import kruskal
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
+from statsmodels.stats.multitest import multipletests
 
 RESULTS_PATH = "redo_results.csv"
 NUM_LOCATIONS = [4, 7, 10]
@@ -41,28 +43,62 @@ for label, arr in zip(group_labels, group_arrays):
     sd = np.std(arr, ddof=1) if len(arr) > 1 else float("nan")
     print(f"  {label:>10}: n={len(arr)}, mean={np.mean(arr):.4f}, sd={sd:.4f}")
 
-# --- Omnibus test -----------------------------------------------------------------------------
-# Kruskal-Wallis (rank-based) instead of parametric two-way ANOVA. At n=3-5 per group, Shapiro-Wilk /
-# Levene pre-checks (as the original paper ran) have very little power to actually detect non-normality
-# or unequal variance, so committing up front to a method that doesn't assume either is more honest than
-# "test assumptions, then pick a method" at this sample size.
-stat, p = kruskal(*group_arrays)
-print(f"\nKruskal-Wallis: H = {stat:.4f}, p = {p:.5f} (n groups = {len(group_arrays)})")
 
-# --- Post-hoc ----------------------------------------------------------------------------------
-# Dunn's test with Holm correction replaces both Dunnett's test (control vs. each treatment cell) and
-# Tukey's HSD (pairwise among treatment cells) from the original pipeline -- one rank-based procedure
-# that handles the unequal group sizes here (control n=3, every other cell n=5) without difficulty.
+# --- Factorial omnibus test -------------------------------------------------------------------
+# Permutation-based two-way ANOVA: refits F1 ~ C(num_locations)*C(dist) on label-shuffled draw means
+# to build an empirical null for each term's F-statistic. This preserves the same main-effect/
+# interaction decomposition as the original parametric two-way ANOVA (so "significant interaction
+# between num_locations and dist" can still be reported), but the p-values come from a permutation
+# null rather than the F-distribution, so they don't need normality or homoscedasticity -- the two
+# assumptions the original paper's own Levene/Shapiro-Wilk checks found reason to doubt. Control is
+# excluded here: it has no dist level (a single fixed origin point), so it's a degenerate cell for a
+# crossed 2-way design and is handled separately below instead.
+def permutation_two_way_anova(data, n_perm=9999, seed=0):
+    rng = np.random.default_rng(seed)
+
+    def f_stats(f1_values):
+        model = smf.ols("F1 ~ C(num_locations)*C(dist)", data=data.assign(F1=f1_values)).fit()
+        return sm.stats.anova_lm(model, typ=2)["F"].drop("Residual")
+
+    observed_f = f_stats(data["F1"].to_numpy())
+    perm_f = pd.DataFrame([f_stats(rng.permutation(data["F1"].to_numpy())) for _ in range(n_perm)])
+    perm_p = ((perm_f >= observed_f).sum() + 1) / (n_perm + 1)
+    return pd.DataFrame({"F": observed_f, "perm_p": perm_p})
+
+
+print("\nPermutation two-way ANOVA (factorial omnibus, treatment cells only, draw-averaged F1):")
+print(permutation_two_way_anova(draw_means).round(4))
+
+
+# --- Control comparison ------------------------------------------------------------------------
+# Dunn's test (rank-based, computed across all 16 groups at once) gives more stable p-values than
+# running 15 separate two-sample tests would, since its variance term pools ranks across every group.
+# But the Dunnett-style question here -- "does control differ from each treatment cell" -- is only 15
+# comparisons of actual interest. Correcting across the full 16-group pairwise matrix (120 comparisons,
+# as the previous version of this script did) needlessly penalizes those 15 for the other 105
+# treatment-vs-treatment comparisons nobody is asking about here, so Holm's correction is instead
+# recomputed on just the relevant subset for each question.
 long_df = pd.concat(
     [pd.DataFrame({"group": label, "F1": arr}) for label, arr in zip(group_labels, group_arrays)],
     ignore_index=True,
 )
-dunn_result = sp.posthoc_dunn(long_df, val_col="F1", group_col="group", p_adjust="holm")
-print("\nDunn's test (Holm-corrected) p-value matrix:")
-print(dunn_result.round(4))
+dunn_raw = sp.posthoc_dunn(long_df, val_col="F1", group_col="group", p_adjust=None)
 
-print("\nControl vs. each cell (Dunnett-style contrasts), sorted by p-value:")
-print(dunn_result["control"].drop("control").sort_values().round(4))
+control_raw_p = dunn_raw["control"].drop("control")
+_, control_holm_p, _, _ = multipletests(control_raw_p.to_numpy(), method="holm")
+control_comparison = pd.Series(control_holm_p, index=control_raw_p.index).sort_values()
+print("\nControl vs. each cell (Dunnett-style, Holm-corrected over these 15 comparisons only):")
+print(control_comparison.round(4))
+
+treatment_labels = [f"{n},{d}" for n in NUM_LOCATIONS for d in DISTS]
+treatment_pairs = [(a, b) for i, a in enumerate(treatment_labels) for b in treatment_labels[i + 1 :]]
+treatment_raw_p = [dunn_raw.loc[a, b] for a, b in treatment_pairs]
+_, treatment_holm_p, _, _ = multipletests(treatment_raw_p, method="holm")
+treatment_comparison = pd.Series(
+    treatment_holm_p, index=[f"{a} vs {b}" for a, b in treatment_pairs]
+).sort_values()
+print("\nTreatment-vs-treatment pairwise comparisons (Holm-corrected over these 105 comparisons only):")
+print(treatment_comparison.round(4))
 
 
 def create_profile_plot():

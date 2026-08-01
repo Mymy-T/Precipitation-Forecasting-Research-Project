@@ -13,7 +13,10 @@ class DatasetType(Enum):
 class PrecipitationClassificationDataset(torch.utils.data.Dataset):
     # Datasets utilized for this project contain years of data with data for the summer months removed
     def __init__(self, folder: str, file_label: str, lookback: int, dataset_type: DatasetType, num_forecast_steps=1):
-        """file_label identifies each draw of data points within each combination, e.g. '10-sites__50-miles__draw3'"""
+        """
+        - folder: the name of the folder containing all of the csv datasets created from the era5 grib datasets; NOT the full path of the folder
+        - file_label: identifies each draw of data points within each combination, e.g. '10-sites__50-miles__draw3'
+        """
         super().__init__()
         self.lookback = lookback
         self.num_forecast_steps = num_forecast_steps
