@@ -34,12 +34,12 @@ pyparsing==3.3.1
 python-dateutil==2.9.0.post0
 pytz==2025.2
 scikit-learn==1.9.0
-scikit-posthocs==0.14.0
 scipy==1.16.3
 seaborn==0.13.2
 setuptools==80.9.0
 six==1.17.0
 statsmodels==0.14.6
+tabulate==0.10.0
 sympy==1.14.0
 tensorboard==2.20.0
 tensorboard-data-server==0.7.2
