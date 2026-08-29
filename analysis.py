@@ -93,6 +93,19 @@ baseline_control_f1 = baseline_df[baseline_df["num_locations"] == 1]["F1"].iloc[
 baseline_treatment_df = baseline_df[baseline_df["num_locations"] != 1]
 baseline_cell_means = baseline_treatment_df.groupby(["num_locations", "dist"])["F1"].mean()
 
+baseline_group_labels = ["control"] + [f"{n},{d}" for n in NUM_LOCATIONS for d in DISTS]
+baseline_groups = {"control": baseline_df[baseline_df["num_locations"] == 1]["F1"].to_numpy()}
+for n in NUM_LOCATIONS:
+    for d in DISTS:
+        subset = baseline_treatment_df[(baseline_treatment_df["num_locations"] == n) & (baseline_treatment_df["dist"] == d)]
+        baseline_groups[f"{n},{d}"] = subset["F1"].to_numpy()
+baseline_group_arrays = [baseline_groups[label] for label in baseline_group_labels]
+
+print("\nPer-cell summary (baseline, n, mean, sd):")
+for label, arr in zip(baseline_group_labels, baseline_group_arrays):
+    sd = np.std(arr, ddof=1) if len(arr) > 1 else float("nan")
+    print(f"  {label:>10}: n={len(arr)}, mean={np.mean(arr):.4f}, sd={sd:.4f}")
+
 print(f"\nBaseline (logistic regression) control F1 (deterministic, single value): {baseline_control_f1:.4f}")
 print("LSTM vs. baseline mean F1 per cell (descriptive comparison, no significance test):")
 for n in NUM_LOCATIONS:
@@ -120,6 +133,18 @@ print(f"  Shapiro-Wilk (normality of ANOVA residuals):      stat={baseline_shapi
 
 print("\nParametric two-way ANOVA (baseline, treatment cells only):")
 print(sm.stats.anova_lm(baseline_anova_model, typ=2).round(4))
+
+# Treatment comparisons (Tukey HSD) -- no baseline control comparison (Dunnett's or otherwise):
+# baseline control is a single deterministic value (n=1), so there's no distribution to test against.
+baseline_long_df = pd.concat(
+    [pd.DataFrame({"group": label, "F1": arr}) for label, arr in zip(baseline_group_labels[1:], baseline_group_arrays[1:])],
+    ignore_index=True,
+)
+baseline_tukey_result = pairwise_tukeyhsd(baseline_long_df["F1"], baseline_long_df["group"])
+baseline_pair_labels = [f"{a} vs {b}" for a, b in combinations(baseline_tukey_result.groupsunique, 2)]
+baseline_treatment_comparison = pd.Series(baseline_tukey_result.pvalues, index=baseline_pair_labels).sort_values()
+print("\nTreatment-vs-treatment pairwise comparisons (baseline, Tukey's HSD):")
+print(baseline_treatment_comparison.round(4))
 
 
 # MARK: Combined ANOVA
@@ -231,6 +256,20 @@ def export_report_to_markdown(filepath=REPORT_PATH, plot_path=PROFILE_PLOT_PATH)
     treatment_table.index.name = "comparison"
     lines += [treatment_table.to_markdown(), ""]
 
+    lines += ["## Per-Cell Summary (Baseline)", ""]
+    baseline_summary_df = pd.DataFrame(
+        [
+            {
+                "group": label,
+                "n": len(arr),
+                "mean": round(np.mean(arr), 4),
+                "sd": round(np.std(arr, ddof=1), 4) if len(arr) > 1 else float("nan"),
+            }
+            for label, arr in zip(baseline_group_labels, baseline_group_arrays)
+        ]
+    )
+    lines += [baseline_summary_df.to_markdown(index=False), ""]
+
     lines += ["## Baseline (Logistic Regression) Comparison", ""]
     lines += [f"Baseline control F1 (deterministic, single value): **{baseline_control_f1:.4f}**", ""]
     baseline_compare_df = pd.DataFrame(
@@ -257,6 +296,11 @@ def export_report_to_markdown(filepath=REPORT_PATH, plot_path=PROFILE_PLOT_PATH)
     baseline_anova_table = sm.stats.anova_lm(baseline_anova_model, typ=2).round(4)
     baseline_anova_table.index.name = "Term"
     lines += [baseline_anova_table.to_markdown(), ""]
+
+    lines += ["## Treatment-vs-Treatment Pairwise Comparisons (Baseline, Tukey's HSD)", ""]
+    baseline_treatment_table = baseline_treatment_comparison.rename("p-value").round(4)
+    baseline_treatment_table.index.name = "comparison"
+    lines += [baseline_treatment_table.to_markdown(), ""]
 
     lines += ["## Combined LSTM-vs-Baseline Two-Way ANOVA", ""]
     lines += [

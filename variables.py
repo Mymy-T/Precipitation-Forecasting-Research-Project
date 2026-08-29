@@ -63,6 +63,14 @@ class MainConfig:
 
 
 @dataclass(frozen=True)
+class RandomGuessingConfig:
+    RESULTS_PATH: str = "random_guessing.csv"
+    RESULTS_COLUMNS: list[str] = field(default_factory=lambda: ["run", "seed", "F1", "TP", "FP", "TN", "FN", "precision", "recall"]) # Output file columns; can be renamed, not reordered or reshaped
+    NUM_RUNS: int = 5 # Number of independent random-guessing replicates to run
+    SEEDS: list[int] = field(default_factory=lambda: [1, 2, 3, 4, 5]) # One seed per run, for reproducibility; must have at least NUM_RUNS entries
+
+
+@dataclass(frozen=True)
 class FixedHyperparameterConfig:
     BATCH_SIZE: int = 32
     LEARNING_RATE: float = 1e-3
