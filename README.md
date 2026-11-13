@@ -1,4 +1,4 @@
-This is the code used in the research project titled *Investigating the Sensitivity of Precipitation Forecasting Models to Predictor Location Number and Concentration*. Specifically, this project explored how the precipitation classification performance of logistic regression and LSTM models changed with different input spatial configurations. The results show that the models responded differently to different input configurations, and that including more predictor locations generally improved performance. 
+This is the code used in the research project titled *Investigating the Sensitivity of Precipitation Forecasting Models to Predictor Location Number and Concentration*. Specifically, this project explored how the precipitation classification performance of logistic regression and LSTM models changed with different input spatial configurations. The results show that the models responded differently to different input configurations and that including more predictor locations generally improved model performance. 
 
 ![Research Poster](https://i.postimg.cc/MT9cmyQC/Poster-Anon.png)
 <p align=center>Research Poster</p>
@@ -22,10 +22,13 @@ The folders hold the datasets, final models, and run logs (loss curves). A brief
 | `performance_log_manager.py` | Contains a class and specific functions for training and evaluating the LSTM and logistic regression models; its `run_and_log` function is called once per trial, and this runs the trial and saves the results  |
 | `random_guessing.py` | Runs random guessing on the test dataset to see how a model without information performs on the task |
 | `trainer.py` | Contains the train and evaluation loops for the LSTM; also contains the function that actually executes the random guessing loop called by `random_guessing.py` |
-| `variables.py` | Contains data classes specifying the configuration of the project, as well as the paths to data and results files |
+| `variables.py` | Contains data classes specifying the configuration of the project and the paths files containing data and results |
 
 ## Technologies
-This project is written in Python. The specific libraries utilized include PyTorch, Pandas, XArray, and Statsmodels.
+This project is written in Python. The specific libraries utilized include PyTorch, Pandas, Xarray, Statsmodels, and more.
+
+## Acknowledgments
+I would like to give a special thanks to Professor Craig Ramseyer at Virginia Tech for supporting and mentoring me throughout the course of this project.
 <!--stackedit_data:
-eyJoaXN0b3J5IjpbLTIxMTQ0ODEyNDFdfQ==
+eyJoaXN0b3J5IjpbLTIwMzk4NTMzNDZdfQ==
 -->
